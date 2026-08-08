@@ -1,0 +1,79 @@
+*** CUDA Device Query (Runtime API) version (CUDART static linking) ***
+
+Device count: 1
+
+Device 0: "AMD Radeon PRO W7900D"
+  CUDA Driver Version / Runtime Version          70253.11 / 70253.11
+  CUDA Capability Major/Minor version number:    11.0
+  Total amount of global memory:                 49136 MBytes (51522830336 bytes)
+  GPU Clock Speed:                               1.76 GHz
+  Max Texture Dimension Size (x,y,z)             1D=(16384), 2D=(16384,16384), 3D=(16384,16384,8192)
+  Max Layered Texture Size (dim) x layers        1D=(16384) x 8192, 2D=(16384,16384) x 8192
+  Total amount of constant memory:               2147483647 bytes
+  Total amount of shared memory per block:       65536 bytes
+  Total number of registers available per block: 196608
+  Warp size:                                     32
+  Maximum number of threads per block:           1024
+  Maximum sizes of each dimension of a block:    1024 x 1024 x 1024
+  Maximum sizes of each dimension of a grid:     2147483647 x 65536 x 65536
+  Maximum memory pitch:                          2147483647 bytes
+  Texture alignment:                             256 bytes
+  Concurrent copy and execution:                 Yes with 8 copy engine(s)
+  Run time limit on kernels:                     No
+  Integrated GPU sharing Host Memory:            No
+  Support host page-locked memory mapping:       Yes
+  Concurrent kernel execution:                   Yes
+  Alignment requirement for Surfaces:            Yes
+  Device has ECC support enabled:                No
+  Device is using TCC driver mode:               No
+  Device supports Unified Addressing (UVA):      No
+  Device PCI Bus ID / PCI location ID:           3 / 0
+  Compute Mode:
+      Default (multiple host threads can use ::cudaSetDevice() with device simultaneously)
+
+deviceQuery, CUDA Driver = CUDART, CUDA Driver Version  = 70253.11, CUDA Runtime Version = 70253.11, NumDevs = 1
+
+[ERR]  {GetWidth}  Display width is 0.
+[ERR]  {GetHeight}  Display height is 0.
+amdgpu: os_same_file_description couldn't determine if two DRM fds reference the same file description.
+If they do, bad things may happen!
+======================================================================
+  End-to-End Vision AI Pipeline on AMD Radeon with OpenCV 5
+  OpenCV + ROCm/HIP | YOLO26x + MIGraphX | no VLM
+======================================================================
+
+[pipeline] AMD GPU via HIP: 1 device(s) available
+[pipeline] Input: data/sidewalk.mp4 (1920x1080 @ 25.0fps, 393 frames) | decode: rocdecode
+[pipeline] Output: output/pipeline/01_yolo_base.mp4 | encode: vaapi
+
+[detector] Trying MIGraphX GPU backend (zero-copy)...
+[detector] Loaded compiled model in 1.11s
+[detector] MIGraphX GPU (FP16, zero-copy) ready
+
+[pipeline] Starting pipeline...
+----------------------------------------------------------------------
+  Frame 100/393 | FPS: 47.4 | Dets: 5
+  Frame 200/393 | FPS: 49.6 | Dets: 7
+  Frame 300/393 | FPS: 50.8 | Dets: 4
+
+======================================================================
+  Pipeline Complete
+  Frames: 393 | Total: 7.74s | Avg FPS: 50.8
+  Video decode:    rocdecode   |   Video encode: vaapi
+  Avg Preprocess:  1.69ms/frame (GPU/HIP)
+  Avg Detection:   9.00ms/frame (migraphx)
+  Avg Postprocess: 0.56ms/frame
+  Output saved to: output/pipeline/01_yolo_base.mp4
+======================================================================
+Input Video Information
+	Codec        : AVC/H.264
+	Frame rate   : 50/2 = 25 fps
+	Sequence     : Progressive
+	Coded size   : [1920, 1088]
+	Display area : [0, 0, 1920, 1080]
+	Chroma       : YUV 420
+	Bit depth    : 8
+Video Decoding Params:
+	Num Surfaces : 7
+	Crop         : [0, 0, 1920, 1080]
+	Resize       : 1920x1080

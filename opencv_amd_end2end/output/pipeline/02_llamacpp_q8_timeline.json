@@ -1,0 +1,73 @@
+{
+  "source": "data/sidewalk.mp4",
+  "backend": "llamacpp",
+  "model": "/models/Qwen3-VL-8B-Instruct-Q8_0.gguf",
+  "base_url": "configured by LLAMACPP_BASE_URL",
+  "prompt": "The three panels are chronological frames from the same video segment. Write one concise English subtitle that summarizes the main subjects, actions, and setting, emphasizing what is happening. Do not list every object. Do not mention images, frames, or the model. Do not invent unclear details. Use at most 18 words and output only the subtitle text.",
+  "interval_seconds": 4.0,
+  "video": {
+    "fps": 25.0,
+    "frame_count": 393,
+    "width": 1920,
+    "height": 1080,
+    "duration": 15.72
+  },
+  "segments": [
+    {
+      "index": 1,
+      "start": 0.0,
+      "end": 4.0,
+      "sample_times": [
+        0.6,
+        2.0,
+        3.4
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-01.jpg",
+      "caption": "Pedestrians cross street as cars pass by in urban setting.",
+      "raw_response": "Pedestrians cross street as cars pass by in urban setting.",
+      "latency_seconds": 1.8965838020667434
+    },
+    {
+      "index": 2,
+      "start": 4.0,
+      "end": 8.0,
+      "sample_times": [
+        4.6,
+        6.0,
+        7.4
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-02.jpg",
+      "caption": "Pedestrian crosses street as vehicles pass by in urban setting.",
+      "raw_response": "Pedestrian crosses street as vehicles pass by in urban setting.",
+      "latency_seconds": 1.6721282652579248
+    },
+    {
+      "index": 3,
+      "start": 8.0,
+      "end": 12.0,
+      "sample_times": [
+        8.6,
+        10.0,
+        11.4
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-03.jpg",
+      "caption": "Pedestrians and cyclists move through urban street scene with delivery truck and storefronts.",
+      "raw_response": "Pedestrians and cyclists move through urban street scene with delivery truck and storefronts.",
+      "latency_seconds": 1.7111128559336066
+    },
+    {
+      "index": 4,
+      "start": 12.0,
+      "end": 15.72,
+      "sample_times": [
+        12.558,
+        13.86,
+        15.162
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-04.jpg",
+      "caption": "Pedestrians cross street as truck passes by, capturing urban motion and daily rhythm.",
+      "raw_response": "Pedestrians cross street as truck passes by, capturing urban motion and daily rhythm.",
+      "latency_seconds": 1.7092588590458035
+    }
+  ]
+}

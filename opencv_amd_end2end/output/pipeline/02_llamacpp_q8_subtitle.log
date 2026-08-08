@@ -1,0 +1,7 @@
+[llama.cpp] auto-resolved model: /models/Qwen3-VL-8B-Instruct-Q8_0.gguf
+[subtitle]  0.00- 4.00s (1.90s): Pedestrians cross street as cars pass by in urban setting.
+[subtitle]  4.00- 8.00s (1.67s): Pedestrian crosses street as vehicles pass by in urban setting.
+[subtitle]  8.00-12.00s (1.71s): Pedestrians and cyclists move through urban street scene with delivery truck and storefronts.
+[subtitle] 12.00-15.72s (1.71s): Pedestrians cross street as truck passes by, capturing urban motion and daily rhythm.
+[subtitle] Timeline saved: output/pipeline/02_llamacpp_q8_timeline.json
+[subtitle] Rendered 393 frames, 1920x1220, encoder=vaapi: output/pipeline/03_final_llamacpp_q8.mp4

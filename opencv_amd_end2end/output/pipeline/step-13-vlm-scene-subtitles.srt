@@ -1,0 +1,15 @@
+1
+00:00:00,000 --> 00:00:04,000
+Pedestrians cross street as cars pass by in urban setting.
+
+2
+00:00:04,000 --> 00:00:08,000
+Pedestrian crosses street as vehicles pass by in urban setting.
+
+3
+00:00:08,000 --> 00:00:12,000
+Pedestrians and cyclists move through urban street scene with delivery truck and storefronts.
+
+4
+00:00:12,000 --> 00:00:15,720
+Pedestrians cross street as truck passes by, capturing urban motion and daily rhythm.

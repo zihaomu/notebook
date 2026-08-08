@@ -1,0 +1,55 @@
+{
+  "status": "PASS",
+  "package": "opencv_amd_end2end",
+  "runtime": {
+    "opencv": "5.1.0-dev",
+    "gpu": "AMD Radeon PRO W7900D",
+    "gpu_arch": "gfx1100",
+    "vlm_backend": "llama.cpp",
+    "quantization": "Q8_0",
+    "llama_cpp_build": "b9766 (035cd8f9a)"
+  },
+  "pipeline": {
+    "input": "data/sidewalk.mp4",
+    "yolo_video": "output/pipeline/01_yolo_base.mp4",
+    "timeline": "output/pipeline/02_llamacpp_q8_timeline.json",
+    "final_video": "output/pipeline/03_final_llamacpp_q8.mp4",
+    "frames": 393,
+    "duration_seconds": 15.72,
+    "final_resolution": [
+      1920,
+      1220
+    ],
+    "vision_pipeline_fps": 50.8,
+    "segments": 4
+  },
+  "notebooks": {
+    "step_by_step": "opencv_amd_end2end_step_by_step.ipynb",
+    "end_to_end": "opencv_amd_end2end.ipynb"
+  },
+  "bundled_models": {
+    "yolo26x.onnx": {
+      "bytes": 223209857,
+      "sha256": "97d5165312f2d1957a24d7ae27863a98860ac88656d40fdac8f10de77999bc35"
+    },
+    "yolo26x_compiled.mxr": {
+      "bytes": 114408032,
+      "sha256": "ef790cfc6b403350c4c5281449811e2dc5e7c7e0d546adfa52caf66e36772d9a"
+    }
+  },
+  "downloaded_models": {
+    "source": "unsloth/Qwen3-VL-8B-Instruct-GGUF",
+    "endpoint": "https://hf-mirror.com",
+    "directory": "models/",
+    "files": {
+      "Qwen3-VL-8B-Instruct-Q8_0.gguf": {
+        "bytes": 8709520224,
+        "sha256": "cb8616bf6ed228982d9e47d7b72b42195342efa26044b0ee1873e61d9e78d3d7"
+      },
+      "mmproj-F16.gguf": {
+        "bytes": 1159030336,
+        "sha256": "d406d03ebabefdef86a2c86bf0c1b65f9e046f7a81c218f25de4931b46a07fc4"
+      }
+    }
+  }
+}

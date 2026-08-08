@@ -1,0 +1,2 @@
+opencv_amd_end2end/models/yolo26x.onnx filter=lfs diff=lfs merge=lfs -text
+opencv_amd_end2end/models/yolo26x_compiled.mxr filter=lfs diff=lfs merge=lfs -text
