@@ -6,9 +6,11 @@
 - [English final article](BLOG_EN.md)
 - [公众号标题、摘要、配图和发布边界](PUBLISHING_WECHAT_CN.md)
 - `assets/`：最终稿实际使用的发布素材
+- `diagrams/specs/`：中文稿 Excalidraw 图的结构化源规格
+- `diagrams/generated/`：由规格本地生成的 `.excalidraw` 与 SVG
 
-本目录只保存最终发布版本。实验代码、输入图片、二进制程序和 notebook 输出不在博客
-目录重复维护。
+实验代码、输入图片、二进制程序和 notebook 输出不在博客目录重复维护。结构图以
+`diagrams/specs/*.json` 为源；`diagrams/generated/` 可以重新生成，不要手工修改。
 
 ## 文章总结
 

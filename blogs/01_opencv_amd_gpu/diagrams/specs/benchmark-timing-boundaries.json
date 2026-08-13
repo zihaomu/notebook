@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "title": "68.1× 与 6.6×，回答的是两个问题",
+  "direction": "DOWN",
+  "backgroundColor": "#ffffff",
+  "nodes": [
+    {
+      "id": "benchmark-workload",
+      "role": "context",
+      "text": "同一 4K workload\nGaussian → Sobel X/Y → magnitude\n整条链重复 4 次",
+      "width": 440
+    },
+    {
+      "id": "compute-only-result",
+      "role": "evidence",
+      "text": "输入已在显存\n2.22 ms · 68.1×",
+      "width": 300
+    },
+    {
+      "id": "transfer-inclusive-result",
+      "role": "evidence",
+      "text": "每轮上传、GPU 预处理与下载\n23.00 ms · 6.6×",
+      "width": 300
+    },
+    {
+      "id": "comparison-caveat",
+      "role": "objection",
+      "text": "CPU 计时不含初始灰度 / FP32 转换\n不是严格对称的端到端对比",
+      "width": 360
+    },
+    {
+      "id": "resident-pipeline-conclusion",
+      "role": "conclusion",
+      "text": "工程结论\n让输入与中间结果尽量常驻显存",
+      "width": 420
+    }
+  ],
+  "edges": [
+    {
+      "from": "benchmark-workload",
+      "to": "compute-only-result",
+      "label": "只看算子吞吐",
+      "relation": "explains"
+    },
+    {
+      "from": "benchmark-workload",
+      "to": "transfer-inclusive-result",
+      "label": "计入数据搬运",
+      "relation": "explains"
+    },
+    {
+      "from": "compute-only-result",
+      "to": "resident-pipeline-conclusion",
+      "label": "说明 GPU 上限",
+      "relation": "supports"
+    },
+    {
+      "from": "transfer-inclusive-result",
+      "to": "resident-pipeline-conclusion",
+      "label": "暴露传输成本",
+      "relation": "supports"
+    },
+    {
+      "from": "comparison-caveat",
+      "to": "transfer-inclusive-result",
+      "label": "限定解读",
+      "relation": "opposes"
+    }
+  ]
+}

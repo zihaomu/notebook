@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "title": "API 没变，执行后端变了",
+  "direction": "DOWN",
+  "backgroundColor": "#ffffff",
+  "nodes": [
+    {
+      "id": "opencv-application-api",
+      "role": "context",
+      "text": "应用代码：cv::cuda\nGpuMat · Stream · filters",
+      "width": 380
+    },
+    {
+      "id": "opencv-hip-port",
+      "role": "inference",
+      "text": "OpenCV 5 HIP 移植层\nWITH_HIP · HIP 编译\nCUDA→HIP 兼容层",
+      "width": 380
+    },
+    {
+      "id": "rocm-hip-runtime",
+      "role": "evidence",
+      "text": "ROCm / HIP runtime\nlibamdhip64 · HSA",
+      "width": 380
+    },
+    {
+      "id": "radeon-gpu-execution",
+      "role": "conclusion",
+      "text": "Radeon GPU 实际执行\nW7900D · RDNA3 · gfx1100",
+      "width": 380
+    }
+  ],
+  "edges": [
+    {
+      "from": "opencv-application-api",
+      "to": "opencv-hip-port",
+      "label": "保留公共 API",
+      "relation": "leads-to"
+    },
+    {
+      "from": "opencv-hip-port",
+      "to": "rocm-hip-runtime",
+      "label": "编译并映射底层调用",
+      "relation": "explains"
+    },
+    {
+      "from": "rocm-hip-runtime",
+      "to": "radeon-gpu-execution",
+      "label": "调度到硬件",
+      "relation": "leads-to"
+    }
+  ]
+}
