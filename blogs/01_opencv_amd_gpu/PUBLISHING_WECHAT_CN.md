@@ -1,10 +1,10 @@
-# OpenCV 公众号发布说明（最终版）
+# OpenCV 公众号发布说明（润色版）
 
 ## 推荐主标题
 
 **OpenCV 用户，多一个 GPU 选择：cv::cuda 跑上 Radeon，还能免费复现**
 
-最终版同时强调工程结论与低门槛复现：没有本地 Radeon，也可以通过 OpenCV 社区专属链接注册 AMD 开发者、领取本次活动提供的免费 48GB 显存 Radeon 云算力，并直接运行同一本 notebook。
+标题同时强调工程结论与低门槛复现：没有本地 Radeon，也可以通过 OpenCV 社区专属链接注册 AMD 开发者、领取本次活动提供的免费 48GB 显存 Radeon 云算力，并直接运行同一本 notebook。
 
 ## 备选标题
 
@@ -16,7 +16,7 @@
 
 ## 推荐摘要
 
-OpenCV 社区正在推进 ROCm/HIP 支持：保留开发者熟悉的 `cv::cuda` API，让 GPU 模块在 AMD Radeon 上执行。Radeon PRO W7900D 实测中，4K 算子链纯计算提速 68.1 倍，计入上传和下载后仍有 6.6 倍，GaussianBlur 最大误差仅 1/255。没有本地 Radeon 也可以参与：通过 OpenCV 社区专属链接注册 AMD 开发者后，即可领取活动提供的免费 48GB 显存 Radeon 云算力，在 Gallery 找到 `opencv_on_amd` 并启动实验。
+OpenCV 社区正在推进 ROCm/HIP 支持：保留开发者熟悉的 `cv::cuda` API，让 GPU 模块在 AMD Radeon 上执行。Radeon PRO W7900D 实测中，4K 算子链纯计算提速 68.1 倍，计入上传、GPU 预处理和下载后为 6.6 倍，GaussianBlur 最大误差仅 1/255。没有本地 Radeon 也可以参与：通过 OpenCV 社区专属链接注册 AMD 开发者后，即可领取活动提供的免费 48GB 显存 Radeon 云算力，在 Gallery 找到 `opencv_on_amd` 并启动实验。
 
 ## 云端复现入口
 
@@ -44,18 +44,22 @@ OpenCV 社区正在推进 ROCm/HIP 支持：保留开发者熟悉的 `cv::cuda` 
 - 方形分享图：`assets/wechat_thumbnail_cn.jpg`，500×500
 - 云端四步引导图：`assets/wechat_radeon_cloud_steps_cn.png`，1080×1770
 
-最终封面把“免费复现”和“48GB 显存”放在主视觉中，性能结果由正文数据卡承接。
+最终封面把“免费复现”和“48GB 显存”放在主视觉中，性能结果由正文表格与计时边界图承接。
 
 ## 正文配图顺序
 
 1. `assets/wechat_cover_cn.jpg`：文章开头，可按公众号模板决定是否重复展示。
-2. `assets/wechat_radeon_cloud_steps_cn.png`：导语后，展示专属注册、领取权益、Gallery、Launch 和 Run All。
-3. `assets/wechat_results_cn.png`：核心性能与正确性数据卡。
-4. `assets/wechat_hip_stack_cn.png`：解释 `cv::cuda` 与 HIP/ROCm 的关系。
-5. `assets/performance_benchmark.png`：完整三分辨率结果。
-6. `assets/correctness_comparison.jpg`：CPU/GPU 正确性验证。
+2. `diagrams/generated/benchmark-timing-boundaries.svg`：解释 68.1× 与 6.6× 的计时口径，以及显存常驻的工程结论。
+3. `diagrams/generated/hip-backend-stack.svg`：解释 `cv::cuda`、OpenCV 5 HIP 移植层、ROCm/HIP runtime 与 Radeon GPU 的关系。
+4. `assets/performance_benchmark.png`：完整三分辨率结果。
+5. `assets/correctness_comparison.jpg`：CPU/GPU 正确性验证。
+6. `assets/wechat_radeon_cloud_steps_cn.png`：展示专属注册、领取权益、Gallery、Launch 和 Run All。
 
 云端引导图是依据实际页面卡片和交互生成的高分辨率示意图，不应标注为网页截图。图中已经注明实际界面与活动规则以页面为准。
+
+两张结构图由本地 Excalidraw renderer 生成。`diagrams/specs/*.json` 是源文件，`diagrams/generated/*` 是可重建输出；不要手工修改 generated 文件，也不要把 SVG 改成网页截图。
+
+`assets/wechat_results_cn.png` 与 `assets/wechat_hip_stack_cn.png` 是上一版的重复信息图，当前正文不再使用；发布时以本节列出的 6 张图为准。
 
 ## 编辑时不要删除的活动边界
 
@@ -71,14 +75,14 @@ OpenCV 社区正在推进 ROCm/HIP 支持：保留开发者熟悉的 `cv::cuda` 
 2. **6.6× 是 4K 含 upload、GPU 预处理、计算和 download 的结果**。
 3. CPU 计时没有包含其最初的灰度/FP32 转换，因此含传输比较对 GPU 偏保守，但不是完全对称的端到端比较。
 4. 结果对应固定 workload、机器和构建，不代表任意 OpenCV 算子、CPU 或 Radeon 型号。
-5. 使用的是 OpenCV 5 HIP 开发分支；相关 PR 截至 2026-08-08 仍处于 Open/review，不是 stock OpenCV release 默认提供的 Radeon binary。
+5. 使用的是 OpenCV 5 HIP 开发分支；相关 PR 截至 2026-08-09 仍处于 Open/review，不是 stock OpenCV release 默认提供的 Radeon binary。
 6. 少量 NVIDIA 专属入口没有 ROCm 对等实现，会返回 `StsNotImplemented`。
 
 ## 公众号排版建议
 
-- 首屏顺序：导语 → 专属注册/领取免费 48GB 云算力 → 四步引导图 → 4K 双口径结果。
+- 首屏顺序：导语 → 4K 双口径结果 → 计时边界图；先建立技术可信度，再进入云端复现入口。
 - 把专属注册链接做成高亮按钮或“阅读原文”；同时将短域名 `radeon.anruicloud.com` 单独成行，供注册后进入 Gallery。
-- 正文表格之外保留 `wechat_results_cn.png`，保证移动端数据可读。
+- 两张 SVG 在导入公众号编辑器后要预览移动端字号；如果平台转换 SVG，需确认文字和箭头未被裁切。
 - 代码块保留三段：熟悉的 `cv::cuda` API、最短 CMake、设备发现检查。
 - 末尾设置三段 CTA：先用专属链接注册并领取权益；再到云端 Run All；最后到 PR 提交不同硬件/算法的测试反馈。
 
