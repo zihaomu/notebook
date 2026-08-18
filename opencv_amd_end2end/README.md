@@ -62,31 +62,101 @@ opencv_amd_end2end/
 │   ├── yolo26x_compiled.mxr
 │   └── README.md                 # Qwen source, size, and hashes
 ├── output/pipeline/              # verified videos, logs, timeline, SRT
+├── docker/
+│   ├── Dockerfile                # /workspace runtime image
+│   ├── start-jupyter.sh          # image default command
+│   └── validate-image.py         # GPU/runtime smoke test
 ├── scripts/
 │   ├── model_setup.py            # hf-mirror download + live progress
 │   ├── notebook_env.py
 │   ├── pipeline_workflow.py
 │   ├── validate_runtime.py
 │   ├── run_pipeline.py
+│   ├── build_notebook_image.sh
+│   ├── test_notebook_image.sh
 │   ├── start_notebook_container.sh
 │   ├── stop_notebook_container.sh
 │   └── build_notebooks.py
 └── src/                           # pipeline implementation
 ```
 
+## Notebook runtime image
+
+The notebook image has two intentionally separate roots:
+
+```text
+/workspace/                        # this directory, writable host bind mount
+├── opencv_amd_end2end*.ipynb
+├── data/  models/  output/
+└── docker/  scripts/  src/
+
+/opencv_workspace                  # immutable image tooling
+├── THIRD_PARTY_VERSIONS
+├── third_party/opencv             # e038708, 5.x-hip
+├── third_party/opencv_contrib     # 467cbc6, 5.x-hip-zerocopy
+└── opencv_end2end/third_party -> ../third_party
+
+/opt/opencv5                       # installed OpenCV 5 HIP runtime
+/opt/rocm                          # ROCm, MIGraphX, rocDecode bindings
+```
+
+Build the image from this package. The script uses the validated local runtime
+image as its base and supplies the two clean source repositories from the legacy
+workspace as BuildKit contexts. The source trees are copied without `.git`
+history; their exact commits and the base image ID are stored in image labels and
+`/opencv_workspace/THIRD_PARTY_VERSIONS`.
+
+```bash
+bash scripts/build_notebook_image.sh
+bash scripts/test_notebook_image.sh
+```
+
+Defaults:
+
+- image: `zihao/opencv-amd-end2end:rocm7.2.1`
+- base image: `zihao/opencv-llamacpp-q8:rocm7.2.1`
+- legacy build inputs: `../../opencv_workspace/opencv_end2end/third_party`
+- runtime host mount: this package -> `/workspace`
+
+Override `PIPELINE_IMAGE`, `BASE_IMAGE`, `LEGACY_WORKSPACE`, `OPENCV_SOURCE`, or
+`OPENCV_CONTRIB_SOURCE` when publishing or building on another host. The legacy
+workspace is a **build input only**; it is not mounted into the running notebook
+container.
+
+The standard Q8_0 llama.cpp server remains a separate service image
+(`zihao/llamacpp-q8:b9766-rocm`) on the same Docker network. This separation lets
+it map the same writable `models/` directory read-only and start loading as soon
+as the notebook download completes.
+
 ## Local Docker workflow
 
-No external `MODEL_DIR` is required. Start Jupyter first:
+No external `MODEL_DIR` or legacy-workspace mount is required. The start script
+builds the notebook image when it is missing, mounts this package exactly once at
+`/workspace`, and starts Jupyter plus the companion llama.cpp service:
 
 ```bash
 bash scripts/start_notebook_container.sh
 ```
 
-Open:
+Open on the remote host:
 
 ```text
 http://127.0.0.1:8891/?token=opencv-amd-end2end
 ```
+
+When connected through VS Code Remote SSH, forward remote port `8891` from the
+**Ports** view. VS Code may choose another free local port; for example, this
+workspace currently maps remote `8891` to local `8892`. Open the local URL shown
+by VS Code:
+
+```text
+http://127.0.0.1:8892/lab?token=opencv-amd-end2end
+```
+
+The workspace setting in `/home/zihaomu/.vscode/settings.json` labels this port
+as `OpenCV AMD JupyterLab`, restores the forwarding after reconnecting, and opens
+the local browser automatically. Always use the local port reported by the
+VS Code **Ports** view rather than assuming it remains `8892`.
 
 If Qwen is missing, llama.cpp waits while the first notebook cell downloads the
 GGUF files into the writable relative `models/` directory. It loads the model
@@ -98,9 +168,19 @@ Stop the services:
 bash scripts/stop_notebook_container.sh
 ```
 
-After model preparation, the CLI workflow is also available:
+Inspect the actual mount and image after startup:
 
 ```bash
+docker inspect opencv_amd_end2end_notebook --format '{{json .Mounts}}'
+docker exec opencv_amd_end2end_notebook cat /opencv_workspace/THIRD_PARTY_VERSIONS
+```
+
+The mount list should contain only this package at `/workspace`; `/opencv_workspace`
+comes from the image layer. After model preparation, the CLI workflow is also
+available inside the container:
+
+```bash
+docker exec -it opencv_amd_end2end_notebook bash
 python3 scripts/validate_runtime.py --require-models --require-vlm
 python3 scripts/run_pipeline.py --force
 ```

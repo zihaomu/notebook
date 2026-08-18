@@ -1,0 +1,5 @@
+**
+!docker/
+!docker/Dockerfile
+!docker/start-jupyter.sh
+!docker/validate-image.py
