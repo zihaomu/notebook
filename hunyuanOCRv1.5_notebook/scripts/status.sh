@@ -10,6 +10,9 @@ if ! docker container inspect "$CONTAINER" >/dev/null 2>&1; then
     exit 1
 fi
 docker inspect "$CONTAINER" --format 'container={{.Name}} image={{.Image}} status={{.State.Status}}'
+backend=$(docker inspect "$CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+    | awk -F= '$1 == "VLLM_ATTENTION_BACKEND" {print $2}')
+printf 'attention_backend=%s\n' "${backend:-ROCM_ATTN}"
 docker top "$CONTAINER" -eo pid,ppid,etime,stat,%cpu,%mem,args
 if [[ -f "$ROOT/.runtime/jupyter-token" ]]; then
     token=$(<"$ROOT/.runtime/jupyter-token")

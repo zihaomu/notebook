@@ -2,7 +2,9 @@
 set -Eeuo pipefail
 ROOT=${HUNYUANOCR_DEMO_ROOT:-/hunyuanOCR_workspace/demo}
 PID_FILE=$ROOT/outputs/runtime/vllm.pid
+BACKEND_FILE=$ROOT/outputs/runtime/attention_backend
 if [[ ! -f "$PID_FILE" ]]; then
+    rm -f "$BACKEND_FILE"
     echo 'ABSENT: no vLLM pid file'
     exit 0
 fi
@@ -25,5 +27,5 @@ if [[ -n "$state" && "$state" != Z ]]; then
         kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
     fi
 fi
-rm -f "$PID_FILE"
+rm -f "$PID_FILE" "$BACKEND_FILE"
 echo "STOPPED: pid=${pid}"

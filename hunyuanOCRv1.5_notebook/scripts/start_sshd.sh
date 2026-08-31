@@ -60,7 +60,7 @@ nohup /usr/sbin/sshd -D -e -p "$SSH_PORT" -h "$HOST_KEY" \
     -o PermitUserEnvironment=no \
     -o X11Forwarding=no \
     -o AllowUsers=hunyuanocr \
-    -o "SetEnv=HUNYUANOCR_WORKSPACE=/hunyuanOCR_workspace MODEL_DIR=/hunyuanOCR_workspace/models/HunyuanOCR MIOPEN_FIND_MODE=2 HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-0} PYTHONPATH=/hunyuanOCR_workspace/demo PATH=/opt/venv/bin:/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin XDG_CACHE_HOME=/hunyuanOCR_workspace/cache/xdg VLLM_CACHE_ROOT=/hunyuanOCR_workspace/cache/vllm MIOPEN_USER_DB_PATH=/hunyuanOCR_workspace/cache/miopen-db MIOPEN_CUSTOM_CACHE_DIR=/hunyuanOCR_workspace/cache/miopen-kernels TORCHINDUCTOR_CACHE_DIR=/hunyuanOCR_workspace/cache/torchinductor" \
+    -o "SetEnv=HUNYUANOCR_WORKSPACE=/hunyuanOCR_workspace MODEL_DIR=/hunyuanOCR_workspace/models/HunyuanOCR MIOPEN_FIND_MODE=2 VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND:-ROCM_ATTN} HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-0} PYTHONPATH=/hunyuanOCR_workspace/demo PATH=/opt/venv/bin:/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin XDG_CACHE_HOME=/hunyuanOCR_workspace/cache/xdg VLLM_CACHE_ROOT=/hunyuanOCR_workspace/cache/vllm MIOPEN_USER_DB_PATH=/hunyuanOCR_workspace/cache/miopen-db MIOPEN_CUSTOM_CACHE_DIR=/hunyuanOCR_workspace/cache/miopen-kernels TORCHINDUCTOR_CACHE_DIR=/hunyuanOCR_workspace/cache/torchinductor" \
     </dev/null >> "$LOG_FILE" 2>&1 &
 pid=$!
 printf '%s\n' "$pid" > "$PID_FILE"

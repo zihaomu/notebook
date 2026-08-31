@@ -164,12 +164,16 @@ def inspect_runtime() -> dict[str, Any]:
             "max_model_len": 131072,
             "gpu_memory_utilization": 0.90,
             "miopen_find_mode": os.environ.get("MIOPEN_FIND_MODE"),
+            "attention_backend": os.environ.get(
+                "VLLM_ATTENTION_BACKEND", "ROCM_ATTN"
+            ),
         },
     }
 
 
 def service_status(timeout: float = 2.0) -> dict[str, Any]:
     pid_file = RUNTIME_DIR / "vllm.pid"
+    backend_file = RUNTIME_DIR / "attention_backend"
     try:
         pid = int(pid_file.read_text().strip()) if pid_file.is_file() else None
     except (OSError, ValueError):
@@ -194,6 +198,9 @@ def service_status(timeout: float = 2.0) -> dict[str, Any]:
         "pid": pid,
         "pid_alive": pid_alive,
         "pid_state": pid_state,
+        "attention_backend": backend_file.read_text().strip()
+        if backend_file.is_file()
+        else None,
         "models": models,
         "error": error,
     }
@@ -201,8 +208,15 @@ def service_status(timeout: float = 2.0) -> dict[str, Any]:
 
 def start_service(timeout_seconds: int = 1800) -> dict[str, Any]:
     ensure_layout()
+    desired_backend = os.environ.get("VLLM_ATTENTION_BACKEND", "ROCM_ATTN")
     before = service_status()
     if before["ready"]:
+        active_backend = before["attention_backend"]
+        if active_backend != desired_backend:
+            raise RuntimeError(
+                f"vLLM already uses {active_backend or 'an unknown backend'}; "
+                f"stop_service() before selecting {desired_backend}."
+            )
         return {"started": False, "elapsed_seconds": 0.0, **before}
     started = time.monotonic()
     env = os.environ.copy()
@@ -323,9 +337,7 @@ def infer_image(
     max_tokens: int = 32768,
     repetition_penalty: float = 1.08,
 ) -> dict[str, Any]:
-    status = service_status()
-    if not status["ready"]:
-        start_service(timeout_seconds=1800)
+    start_service(timeout_seconds=1800)
     image, source_path, original_size = _normalized_image(source)
     encoded = _data_url(image)
     client = OpenAI(

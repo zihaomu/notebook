@@ -26,6 +26,18 @@ cd /home/zihaomu/bigssd/notebook/hunyuanOCRv1.5_notebook
 SSH_PORT=22223 GPU=1 ./scripts/run.sh
 ```
 
+The decoder attention backend defaults to `ROCM_ATTN`. Select either supported
+vLLM ROCm backend when creating the container:
+
+```bash
+VLLM_ATTENTION_BACKEND=ROCM_ATTN SSH_PORT=22223 GPU=1 ./scripts/run.sh
+VLLM_ATTENTION_BACKEND=TRITON_ATTN SSH_PORT=22223 GPU=1 ./scripts/run.sh
+```
+
+The setting applies to decoder attention. The HunyuanOCR vision encoder keeps
+using its compatible `TORCH_SDPA` backend. Stop and recreate the container when
+switching backends.
+
 Port `2222` is the default. This host currently uses `22223` because another
 container occupies `2222`. The launcher mounts this directory at
 `/hunyuanOCR_workspace/demo`, mounts the authorized keys read-only, and prints

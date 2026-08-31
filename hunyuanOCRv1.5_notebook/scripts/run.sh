@@ -6,6 +6,7 @@ CONTAINER=${CONTAINER:-hunyuanocr-notebook}
 GPU=${GPU:-1}
 JUPYTER_PORT=${JUPYTER_PORT:-8892}
 VLLM_PORT=${VLLM_PORT:-18016}
+VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND:-ROCM_ATTN}
 SSH_PORT=${SSH_PORT:-2222}
 SSH_AUTHORIZED_KEYS_FILE=${SSH_AUTHORIZED_KEYS_FILE:-$HOME/.ssh/authorized_keys}
 CONTAINER_AUTHORIZED_KEYS_FILE=/hunyuanOCR_workspace/ssh/authorized_keys
@@ -14,6 +15,13 @@ CONTAINER_UID=1001
 CONTAINER_GID=1001
 TOKEN=${TOKEN:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')}
 
+case "$VLLM_ATTENTION_BACKEND" in
+    ROCM_ATTN|TRITON_ATTN) ;;
+    *)
+        echo 'ERROR: VLLM_ATTENTION_BACKEND must be ROCM_ATTN or TRITON_ATTN' >&2
+        exit 1
+        ;;
+esac
 if [[ "$(id -u):$(id -g)" != "$CONTAINER_UID:$CONTAINER_GID" ]]; then
     echo "ERROR: this demo requires host UID:GID $CONTAINER_UID:$CONTAINER_GID for bind mounts" >&2
     exit 1
@@ -72,6 +80,7 @@ docker run -d \
     -e "JUPYTER_PORT=$JUPYTER_PORT" \
     -e "JUPYTER_TOKEN=$TOKEN" \
     -e "VLLM_PORT=$VLLM_PORT" \
+    -e "VLLM_ATTENTION_BACKEND=$VLLM_ATTENTION_BACKEND" \
     -e "SSH_PORT=$SSH_PORT" \
     -e "SSH_AUTHORIZED_KEYS_FILE=$CONTAINER_AUTHORIZED_KEYS_FILE" \
     -v "$ROOT:/hunyuanOCR_workspace/demo" \
@@ -84,8 +93,8 @@ for _ in {1..60}; do
     if curl --noproxy '*' -fsS --max-time 3 \
         "http://127.0.0.1:${JUPYTER_PORT}/api/status?token=${TOKEN}" >/dev/null 2>&1 \
         && ssh-keyscan -T 3 -p "$SSH_PORT" 127.0.0.1 >/dev/null 2>&1; then
-        printf 'READY container=%s\nLogin page: http://127.0.0.1:%s/login\nToken: %s\nNotebook path: hunyuan_ocr_demo.ipynb\nSSH: ssh -p %s hunyuanocr@<server-address>\nAPI after notebook startup cell: http://127.0.0.1:%s/v1\n' \
-            "$CONTAINER" "$JUPYTER_PORT" "$TOKEN" "$SSH_PORT" "$VLLM_PORT"
+        printf 'READY container=%s\nAttention backend: %s\nLogin page: http://127.0.0.1:%s/login\nToken: %s\nNotebook path: hunyuan_ocr_demo.ipynb\nSSH: ssh -p %s hunyuanocr@<server-address>\nAPI after notebook startup cell: http://127.0.0.1:%s/v1\n' \
+            "$CONTAINER" "$VLLM_ATTENTION_BACKEND" "$JUPYTER_PORT" "$TOKEN" "$SSH_PORT" "$VLLM_PORT"
         exit 0
     fi
     sleep 2
