@@ -45,7 +45,6 @@ case "$VLLM_ATTENTION_BACKEND" in
         ;;
 esac
 test -f /hunyuanOCR_workspace/models/HunyuanOCR/model.safetensors
-test ! -e /workspace
 if [[ -z "${HIP_VISIBLE_DEVICES:-}" ]]; then
     unset HIP_VISIBLE_DEVICES
 fi
@@ -57,9 +56,31 @@ mkdir -p "$HOME" "$VLLM_CACHE_ROOT" "$MIOPEN_USER_DB_PATH" \
 : > "$LOG_FILE"
 /opt/venv/bin/python3 /hunyuanOCR_workspace/bin/verify_model.py \
     --model-dir "$MODEL_DIR" >> "$LOG_FILE" 2>&1
-/opt/venv/bin/python3 /hunyuanOCR_workspace/bin/verify_image.py \
-    --require-model --require-gpu --require-one-gpu --require-arch gfx1100 \
-    >> "$LOG_FILE" 2>&1
+/opt/venv/bin/python3 - <<'PYGPU' >> "$LOG_FILE" 2>&1
+import json
+import torch
+
+facts = {
+    "torch": torch.__version__,
+    "hip": torch.version.hip,
+    "cuda_available": torch.cuda.is_available(),
+    "device_count": torch.cuda.device_count(),
+    "devices": [],
+}
+for index in range(torch.cuda.device_count()):
+    properties = torch.cuda.get_device_properties(index)
+    facts["devices"].append({
+        "index": index,
+        "name": properties.name,
+        "arch": getattr(properties, "gcnArchName", None),
+    })
+assert facts["torch"] == "2.10.0+rocm7.2.4.git3d3aa833", facts
+assert facts["hip"] == "7.2.53211", facts
+assert facts["cuda_available"], facts
+assert facts["device_count"] == 1, facts
+assert str(facts["devices"][0]["arch"]).startswith("gfx1100"), facts
+print(json.dumps(facts, sort_keys=True))
+PYGPU
 started=$(date +%s)
 printf '%s\n' "$VLLM_ATTENTION_BACKEND" > "$BACKEND_FILE"
 nohup setsid env -u VLLM_ATTENTION_BACKEND MIOPEN_FIND_MODE=2 \

@@ -18,7 +18,6 @@ fi
     echo "ERROR: SSH authorized keys file is missing or empty: $AUTHORIZED_KEYS_SOURCE" >&2
     exit 66
 }
-test ! -e /workspace
 
 mkdir -p "$SSH_STATE_DIR" "$ROOT/outputs/logs"
 chmod 0700 "$SSH_STATE_DIR"

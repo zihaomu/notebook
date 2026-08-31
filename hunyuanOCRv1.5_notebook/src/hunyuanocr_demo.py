@@ -98,11 +98,20 @@ def runtime_report(include_torch_probe: bool = True) -> dict[str, Any]:
                 os_release[key] = value.strip('"')
     paths = {
         "demo_root": str(ROOT),
+        "bundle_root": str(ROOT.resolve()),
+        "bundle_layout_complete": all(
+            (ROOT / relative).exists()
+            for relative in (
+                "src/hunyuanocr_demo.py",
+                "scripts/start_service.sh",
+                "assets/images",
+                "outputs",
+            )
+        ),
         "model_dir": str(MODEL_DIR),
         "cache_dir": os.environ.get("VLLM_CACHE_ROOT"),
         "output_dir": str(OUTPUT_DIR),
         "workspace_exists": Path("/hunyuanOCR_workspace").is_dir(),
-        "legacy_workspace_exists": Path("/workspace").exists(),
         "model_weight_exists": (MODEL_DIR / "model.safetensors").is_file(),
         "model_weight_bytes": (MODEL_DIR / "model.safetensors").stat().st_size
         if (MODEL_DIR / "model.safetensors").is_file() else None,

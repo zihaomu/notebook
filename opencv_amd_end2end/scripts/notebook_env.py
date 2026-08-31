@@ -7,11 +7,37 @@ import sys
 from pathlib import Path
 
 
-def _find_package_root() -> Path:
+def _is_package_root(path: Path) -> bool:
+    return (
+        (path / "scripts/notebook_env.py").is_file()
+        and (path / "src").is_dir()
+        and (path / "data").is_dir()
+    )
+
+
+def _find_package_root() -> tuple[Path, Path | None]:
     configured = os.environ.get("OPENCV_AMD_END2END_ROOT")
-    if configured:
-        return Path(configured).expanduser().resolve()
-    return Path(__file__).resolve().parents[1]
+    configured_path = Path(configured).expanduser().resolve() if configured else None
+    if configured_path is not None and _is_package_root(configured_path):
+        return configured_path, configured_path
+
+    package_root = Path(__file__).resolve().parents[1]
+    if not _is_package_root(package_root):
+        raise FileNotFoundError(f"Invalid opencv_amd_end2end package root: {package_root}")
+    return package_root, configured_path
+
+
+def _project_path(environment_name: str, directory_name: str) -> Path:
+    configured = os.environ.get(environment_name)
+    default = ROOT / directory_name
+    if not configured:
+        return default.resolve()
+
+    configured_path = Path(configured).expanduser().resolve()
+    if STALE_ROOT is not None and not _is_package_root(STALE_ROOT):
+        if configured_path == (STALE_ROOT / directory_name).resolve():
+            return default.resolve()
+    return configured_path
 
 
 def _first_existing(*candidates: str | Path) -> Path:
@@ -22,11 +48,12 @@ def _first_existing(*candidates: str | Path) -> Path:
     return Path(candidates[0]).expanduser().resolve()
 
 
-ROOT = _find_package_root()
+ROOT, STALE_ROOT = _find_package_root()
 SRC = ROOT / "src"
 DATA = ROOT / "data"
-MODELS = Path(os.environ.get("OPENCV_AMD_END2END_MODEL_DIR", ROOT / "models")).resolve()
-OUTPUT = Path(os.environ.get("OPENCV_AMD_END2END_OUTPUT_DIR", ROOT / "output")).resolve()
+MODELS = _project_path("OPENCV_AMD_END2END_MODEL_DIR", "models")
+OUTPUT = _project_path("OPENCV_AMD_END2END_OUTPUT_DIR", "output")
+MODELS.mkdir(parents=True, exist_ok=True)
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 OPENCV_INSTALL = _first_existing(
@@ -57,9 +84,9 @@ existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
 os.environ["LD_LIBRARY_PATH"] = ":".join(
     [*library_paths, *([existing_ld] if existing_ld else [])]
 )
-os.environ.setdefault("OPENCV_AMD_END2END_ROOT", str(ROOT))
-os.environ.setdefault("OPENCV_AMD_END2END_MODEL_DIR", str(MODELS))
-os.environ.setdefault("OPENCV_AMD_END2END_OUTPUT_DIR", str(OUTPUT))
+os.environ["OPENCV_AMD_END2END_ROOT"] = str(ROOT)
+os.environ["OPENCV_AMD_END2END_MODEL_DIR"] = str(MODELS)
+os.environ["OPENCV_AMD_END2END_OUTPUT_DIR"] = str(OUTPUT)
 os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 

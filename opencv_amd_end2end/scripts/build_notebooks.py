@@ -64,25 +64,38 @@ def notebook(cells: list[dict]) -> dict:
 
 
 setup_code = r'''
+import importlib
 import os
 import sys
 from pathlib import Path
 
 
 def find_package_root() -> Path:
-    candidates = [Path.cwd(), *Path.cwd().parents]
+    origins = [Path.cwd(), *(Path(value) for value in sys.path if value)]
+    candidates = []
+    for origin in origins:
+        candidates.extend((origin, *origin.parents))
     for candidate in candidates:
-        if (candidate / "scripts/notebook_env.py").is_file():
+        if (
+            (candidate / "scripts/notebook_env.py").is_file()
+            and (candidate / "src").is_dir()
+            and (candidate / "data").is_dir()
+        ):
             return candidate.resolve()
     raise FileNotFoundError("Run this notebook from the opencv_amd_end2end folder")
 
 
 ROOT = find_package_root()
-os.environ.setdefault("OPENCV_AMD_END2END_ROOT", str(ROOT))
+os.environ["OPENCV_AMD_END2END_ROOT"] = str(ROOT)
+os.environ["OPENCV_AMD_END2END_MODEL_DIR"] = str(ROOT / "models")
+os.environ["OPENCV_AMD_END2END_OUTPUT_DIR"] = str(ROOT / "output")
+(ROOT / "models").mkdir(parents=True, exist_ok=True)
+(ROOT / "output").mkdir(parents=True, exist_ok=True)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import notebook_env as env
+env = importlib.reload(env)
 from scripts.notebook_helpers import frame_at, show_bgr, show_bgr_grid, video_info
 
 print(env.package_layout())

@@ -9,7 +9,6 @@ ROOT=${HUNYUANOCR_DEMO_ROOT:-/hunyuanOCR_workspace/demo}
 : "${SSH_STATE_DIR:=/hunyuanOCR_workspace/cache/ssh}"
 export SSH_PORT SSH_AUTHORIZED_KEYS_FILE SSH_STATE_DIR VLLM_ATTENTION_BACKEND
 [[ "${MIOPEN_FIND_MODE:-}" == 2 ]] || { echo 'ERROR: MIOPEN_FIND_MODE=2 is required' >&2; exit 64; }
-test ! -e /workspace
 mkdir -p "$ROOT/outputs/json" "$ROOT/outputs/visualizations" "$ROOT/outputs/logs" "$ROOT/outputs/runtime" "$HOME"
 test -w "$ROOT/outputs/runtime"
 rm -f "$ROOT/outputs/runtime/vllm.pid" "$ROOT/outputs/runtime/models.json" \
