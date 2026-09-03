@@ -112,7 +112,7 @@ crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/
 muzihao2/work:opencv_end2end_2026_08_12
 ```
 
-Build the thin derived image:
+Build the dedicated baked image:
 
 ```bash
 bash scripts/build_notebook_image.sh
@@ -121,10 +121,20 @@ bash scripts/build_notebook_image.sh
 Default output image:
 
 ```text
-zihao/ultralytics-yolo26-workshop:rocm7.2.1
+zihao/ultralytics-yolo26-workshop:rocm7.2.1-baked
 ```
 
-The build script pins and validates the fork commit, prefetches the ORT wheel, and compiles the HIP/DRM PRIME/VA-API bridge into `/opt/venv`. The image records both the Ultralytics patch SHA and bridge source SHA as OCI labels. This avoids relying on Git/PyPI connectivity inside `docker build` and prevents a bind mount from hiding a missing native module.
+Published registry tag:
+
+```text
+crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop_2026_09_03
+```
+
+The dedicated image contains the complete workshop under `/workspace`, official YOLO26x PT/ONNX, the validated `gfx1100` MIGraphX `.mxr`, saved notebooks/results, patched Ultralytics, ORT MIGraphX, and two build-time native artifacts: the pybind HIP/DRM PRIME/VA-API encoder and the standalone surface capability probe. OpenCV HIP and rocDecode are inherited from the pinned base image.
+
+The immutable seed is also stored under `/opt/ultralytics-yolo26/seed`. At startup it fills missing YOLO/cache/output files in mounted data volumes. The source tree is no longer mounted over `/workspace`; only `models/` and `output/` are persistent. Qwen3-VL GGUF files remain runtime data because they add about 10 GB and are shared with the llama.cpp container.
+
+OCI labels record the source commit, base image, Ultralytics patch, bridge source, bundle, YOLO PT/ONNX, and MIGraphX cache SHA-256 identities. `scripts/test_notebook_image.sh` runs with no network, no source mount, and a read-only root filesystem, proving the compiled/runtime bundle is actually self-contained.
 
 ## Start Locally
 

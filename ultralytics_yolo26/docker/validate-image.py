@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +17,9 @@ def main() -> None:
     ).resolve()
     if workspace != Path("/workspace"):
         raise RuntimeError(f"Expected workspace /workspace, got {workspace}")
+    seed_root = Path("/opt/ultralytics-yolo26/seed")
+    if os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE") != "baked":
+        raise RuntimeError("Image does not declare a baked workshop bundle")
 
     required_paths = [
         workspace / "scripts/notebook_env.py",
@@ -24,6 +28,13 @@ def main() -> None:
         workspace / "data/sidewalk.mp4",
         workspace / "models/yolo26x.pt",
         workspace / "models/yolo26x.onnx",
+        workspace / "models/ort-migraphx-cache/735f1583e99dfeb733da/identity.json",
+        workspace / "models/ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr",
+        workspace / "ultralytics_yolo26x_step_by_step.ipynb",
+        workspace / "ultralytics_yolo26x_end_to_end.ipynb",
+        seed_root / "scripts/workshop_bundle_identity.py",
+        Path("/usr/local/bin/vaapi-hip-encode-probe"),
+        Path("/usr/local/share/ultralytics-yolo26-bundle.sha256"),
     ]
     missing = [str(path) for path in required_paths if not path.exists()]
     if missing:
@@ -39,6 +50,7 @@ def main() -> None:
     import torch
     import ultralytics
     from hip_vaapi_bridge import HipVaapiEncoder
+    from scripts.workshop_bundle_identity import compute as compute_bundle_sha256
     from tests.test_ultralytics_migraphx_backend import validate as validate_backend
     from video_io import RocDecodeReader
 
@@ -60,6 +72,40 @@ def main() -> None:
         raise RuntimeError("OpenCV GPU NMS binding is missing")
     if "align_corners" not in (cv2.cuda.resize.__doc__ or ""):
         raise RuntimeError("OpenCV HIP resize align_corners support is missing")
+
+    identities = {
+        "bundle": (
+            compute_bundle_sha256(seed_root),
+            os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE_SHA256", ""),
+        ),
+        "checkpoint": (
+            hashlib.sha256((workspace / "models/yolo26x.pt").read_bytes()).hexdigest(),
+            os.environ.get("ULTRALYTICS_YOLO26_CHECKPOINT_SHA256", ""),
+        ),
+        "onnx": (
+            hashlib.sha256((workspace / "models/yolo26x.onnx").read_bytes()).hexdigest(),
+            os.environ.get("ULTRALYTICS_YOLO26_ONNX_SHA256", ""),
+        ),
+        "migraphx_cache": (
+            hashlib.sha256(
+                (workspace / "models/ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr").read_bytes()
+            ).hexdigest(),
+            os.environ.get("ULTRALYTICS_MIGRAPHX_CACHE_SHA256", ""),
+        ),
+    }
+    for name, (actual, expected) in identities.items():
+        if not expected or expected == "unknown" or actual != expected:
+            raise RuntimeError(
+                f"{name} identity mismatch: actual={actual}, expected={expected}"
+            )
+    declared_bundle = Path(
+        "/usr/local/share/ultralytics-yolo26-bundle.sha256"
+    ).read_text(encoding="utf-8").strip()
+    if declared_bundle != identities["bundle"][0]:
+        raise RuntimeError("Installed bundle identity file does not match the seed")
+    for qwen_name in ("Qwen3-VL-8B-Instruct-Q8_0.gguf", "mmproj-F16.gguf"):
+        if (seed_root / "models" / qwen_name).exists():
+            raise RuntimeError(f"Qwen runtime model was unexpectedly baked: {qwen_name}")
 
     reader = RocDecodeReader(str(workspace / "data/sidewalk.mp4"), device_id=0)
     try:
@@ -120,6 +166,38 @@ def main() -> None:
             f"HIP/VAAPI smoke shape mismatch: {direct_frame.shape} vs {frame.shape}"
         )
 
+    probe_output = Path("/tmp/vaapi-hip-encode-probe.mp4")
+    probe_output.unlink(missing_ok=True)
+    probe = subprocess.run(
+        [
+            "/usr/local/bin/vaapi-hip-encode-probe",
+            os.environ.get("VAAPI_DEVICE", "/dev/dri/renderD128"),
+            str(probe_output),
+            "4",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    probe_capture = cv2.VideoCapture(str(probe_output))
+    probe_frames = int(probe_capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    probe_ok, probe_frame = probe_capture.read()
+    probe_capture.release()
+    probe_output.unlink(missing_ok=True)
+    if not probe_ok or probe_frame is None or probe_frames != 4:
+        raise RuntimeError(
+            f"Standalone VAAPI/HIP probe is invalid: ok={probe_ok}, frames={probe_frames}"
+        )
+    gray = cv2.cvtColor(probe_frame, cv2.COLOR_BGR2GRAY)
+    margin = 64
+    quarter = gray.shape[1] // 4
+    luma_means = [
+        float(np.mean(gray[margin:-margin, index * quarter + margin:(index + 1) * quarter - margin]))
+        for index in range(4)
+    ]
+    if not all(right - left > 25 for left, right in zip(luma_means, luma_means[1:])):
+        raise RuntimeError(f"Standalone VAAPI/HIP probe pixels are invalid: {luma_means}")
+
     cache_root = Path(
         os.environ.get(
             "ULTRALYTICS_MIGRAPHX_CACHE_ROOT",
@@ -142,6 +220,19 @@ def main() -> None:
         "gpu": torch.cuda.get_device_name(0),
         "gpu_arch": torch.cuda.get_device_properties(0).gcnArchName,
         "decoded_frame": list(frame.shape),
+        "baked_bundle": {
+            "seed_root": str(seed_root),
+            "identities": {
+                name: actual for name, (actual, _) in identities.items()
+            },
+            "qwen_models": "runtime-volume",
+        },
+        "standalone_vaapi_hip_probe": {
+            "binary": "/usr/local/bin/vaapi-hip-encode-probe",
+            "frames": probe_frames,
+            "quarter_luma_means": [round(value, 2) for value in luma_means],
+            "stdout": probe.stdout.strip(),
+        },
         "hip_vaapi_bridge": {
             "module": str(Path(__import__("hip_vaapi_bridge").__file__).resolve()),
             "sha256": bridge_sha256,

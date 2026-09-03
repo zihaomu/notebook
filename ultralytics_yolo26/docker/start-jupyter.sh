@@ -5,9 +5,13 @@ workspace="${ULTRALYTICS_YOLO26_ROOT:-${OPENCV_AMD_END2END_ROOT:-/workspace}}"
 port="${JUPYTER_PORT:-8888}"
 token="${JUPYTER_TOKEN:-ultralytics-yolo26}"
 
+seed_root="/opt/ultralytics-yolo26/seed"
 if [[ ! -f "$workspace/scripts/notebook_env.py" ]]; then
-    echo "Expected the ultralytics_yolo26 workshop at $workspace." >&2
-    echo "Mount it with: -v /path/to/ultralytics_yolo26:/workspace" >&2
+    echo "Expected the baked ultralytics_yolo26 workshop at $workspace." >&2
+    exit 1
+fi
+if [[ ! -f "$seed_root/scripts/notebook_env.py" ]]; then
+    echo "Image is missing the immutable workshop seed at $seed_root." >&2
     exit 1
 fi
 
@@ -23,6 +27,30 @@ export OPENCV_AMD_END2END_OUTPUT_DIR="$ULTRALYTICS_YOLO26_OUTPUT_DIR"
 
 mkdir -p "$ULTRALYTICS_YOLO26_MODEL_DIR" "$ULTRALYTICS_YOLO26_OUTPUT_DIR" \
     "$ULTRALYTICS_MIGRAPHX_CACHE_ROOT"
+
+seed_file() {
+    local relative="$1"
+    local source="$seed_root/$relative"
+    local target
+    case "$relative" in
+        models/*) target="$ULTRALYTICS_YOLO26_MODEL_DIR/${relative#models/}" ;;
+        output/*) target="$ULTRALYTICS_YOLO26_OUTPUT_DIR/${relative#output/}" ;;
+        *) echo "Unsupported seed path: $relative" >&2; return 2 ;;
+    esac
+    if [[ ! -f "$target" ]]; then
+        install -D -m 0644 "$source" "$target"
+    fi
+}
+
+seed_file models/yolo26x.pt
+seed_file models/yolo26x.onnx
+while IFS= read -r -d '' source; do
+    seed_file "${source#"$seed_root/"}"
+done < <(find "$seed_root/models/ort-migraphx-cache" -type f -print0)
+while IFS= read -r -d '' source; do
+    seed_file "${source#"$seed_root/"}"
+done < <(find "$seed_root/output" -type f -print0)
+
 cd "$workspace"
 
 exec /opt/venv/bin/jupyter-lab \

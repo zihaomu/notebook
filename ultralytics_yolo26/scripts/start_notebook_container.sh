@@ -3,7 +3,8 @@ set -euo pipefail
 
 PACKAGE_ROOT="${PACKAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MODEL_DIR="${MODEL_DIR:-$PACKAGE_ROOT/models}"
-PIPELINE_IMAGE="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1}"
+OUTPUT_DIR="${OUTPUT_DIR:-$PACKAGE_ROOT/output}"
+PIPELINE_IMAGE="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1-baked}"
 LLAMA_IMAGE="${LLAMA_IMAGE:-zihao/llamacpp-q8:b9766-rocm}"
 NETWORK="${NETWORK:-ultralytics_yolo26}"
 PIPELINE_CONTAINER="${PIPELINE_CONTAINER:-ultralytics_yolo26_notebook}"
@@ -16,9 +17,9 @@ PIPELINE_GPU="${PIPELINE_GPU:-0}"
 LLAMA_GPU="${LLAMA_GPU:-$PIPELINE_GPU}"
 VAAPI_DEVICE="${VAAPI_DEVICE:-/dev/dri/renderD128}"
 
-mkdir -p "$MODEL_DIR"
-# The first notebook cell downloads the official YOLO ONNX. Ultralytics
-# creates the target-specific ORT MIGraphX cache on first GPU inference.
+mkdir -p "$MODEL_DIR" "$OUTPUT_DIR"
+# The image seeds YOLO26x and the matching gfx1100 MIGraphX cache into an
+# empty model volume. Qwen3-VL remains a runtime download shared with llama.cpp.
 
 docker image inspect "$PIPELINE_IMAGE" >/dev/null 2>&1 || \
     PIPELINE_IMAGE="$PIPELINE_IMAGE" \
@@ -31,7 +32,7 @@ render_gid=$(getent group render | cut -d: -f3)
 user_id=$(id -u)
 group_id=$(id -g)
 
-# Recreate containers when their model/package mounts point somewhere else.
+# Recreate containers when their data mounts or baked image identity differ.
 if docker inspect "$LLAMA_CONTAINER" >/dev/null 2>&1; then
     current_model_dir=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/models"}}{{.Source}}{{end}}{{end}}' "$LLAMA_CONTAINER")
     if [[ "$(realpath "$current_model_dir")" != "$(realpath "$MODEL_DIR")" ]]; then
@@ -39,10 +40,15 @@ if docker inspect "$LLAMA_CONTAINER" >/dev/null 2>&1; then
     fi
 fi
 if docker inspect "$PIPELINE_CONTAINER" >/dev/null 2>&1; then
-    current_package_root=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' "$PIPELINE_CONTAINER")
+    current_workspace_mount=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' "$PIPELINE_CONTAINER")
+    current_model_dir=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/workspace/models"}}{{.Source}}{{end}}{{end}}' "$PIPELINE_CONTAINER")
+    current_output_dir=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/workspace/output"}}{{.Source}}{{end}}{{end}}' "$PIPELINE_CONTAINER")
     current_pipeline_image_id=$(docker inspect -f '{{.Image}}' "$PIPELINE_CONTAINER")
-    if [[ -z "$current_package_root" || \
-          "$(realpath "$current_package_root")" != "$(realpath "$PACKAGE_ROOT")" || \
+    if [[ -n "$current_workspace_mount" || \
+          -z "$current_model_dir" || \
+          "$(realpath "$current_model_dir")" != "$(realpath "$MODEL_DIR")" || \
+          -z "$current_output_dir" || \
+          "$(realpath "$current_output_dir")" != "$(realpath "$OUTPUT_DIR")" || \
           "$current_pipeline_image_id" != "$pipeline_image_id" ]]; then
         docker rm -f "$PIPELINE_CONTAINER" >/dev/null
     fi
@@ -84,7 +90,8 @@ else
         -e LLAMACPP_BASE_URL="http://$LLAMA_CONTAINER:8199/v1" \
         -e HF_ENDPOINT="$HF_ENDPOINT" \
         -e JUPYTER_TOKEN="$TOKEN" \
-        -v "$PACKAGE_ROOT:/workspace" \
+        -v "$MODEL_DIR:/workspace/models" \
+        -v "$OUTPUT_DIR:/workspace/output" \
         "$PIPELINE_IMAGE" >/dev/null
 fi
 
@@ -103,8 +110,9 @@ if ! validation_output=$(docker exec "$PIPELINE_CONTAINER" \
 fi
 
 echo "Jupyter: http://127.0.0.1:$JUPYTER_PORT/?token=$TOKEN"
-echo "Package: $PACKAGE_ROOT"
+echo "Workspace: baked into $PIPELINE_IMAGE"
 echo "Models: $MODEL_DIR"
+echo "Output: $OUTPUT_DIR"
 echo "Pipeline GPU: $PIPELINE_GPU; llama.cpp GPU: $LLAMA_GPU; VA-API: $VAAPI_DEVICE"
 if [[ -f "$MODEL_DIR/Qwen3-VL-8B-Instruct-Q8_0.gguf" && -f "$MODEL_DIR/mmproj-F16.gguf" ]]; then
     echo "Qwen models are present; llama.cpp is loading or ready on port $LLAMA_PORT."

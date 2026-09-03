@@ -94,6 +94,7 @@ void write_packet(AVFormatContext* format, AVCodecContext* encoder, AVStream* st
         }
         CHECK_FFMPEG(status);
         av_packet_rescale_ts(packet, encoder->time_base, stream->time_base);
+        packet->duration = av_rescale_q(1, encoder->time_base, stream->time_base);
         packet->stream_index = stream->index;
         CHECK_FFMPEG(av_interleaved_write_frame(format, packet));
         av_packet_unref(packet);
