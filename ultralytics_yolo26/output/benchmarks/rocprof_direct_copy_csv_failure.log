@@ -1,0 +1,173 @@
+Attempt to enable hip visiblity for agent-2 which is not visible to HSA (ROCR)
+W20260903 04:00:05.734629 133885012663808 simple_timer.cpp:55] [rocprofv3] tool initialization ::     0.008428 sec
+W20260903 04:00:05.735066 133885012663808 simple_timer.cpp:55] [rocprofv3] '/opt/venv/bin/python3 src/pipeline.py --input data/sidewalk.mp4 --output output/benchmarks/direct_copy_audit/output.mp4 --no-vlm --max-frames 30 --video-decode rocdecode --video-encode vaapi --gpu-direct-encode on' ::     0.000000 sec
+W20260903 04:00:07.129179 133885012663808 tool.cpp:2422] HSA version 8.20.1 initialized (instance=0)
+*** CUDA Device Query (Runtime API) version (CUDART static linking) *** 
+
+Device count: 1
+
+Device 0: "AMD Radeon PRO W7900D"
+  CUDA Driver Version / Runtime Version          70253.11 / 70253.11
+  CUDA Capability Major/Minor version number:    11.0
+  Total amount of global memory:                 49136 MBytes (51522830336 bytes)
+  GPU Clock Speed:                               1.76 GHz
+  Max Texture Dimension Size (x,y,z)             1D=(16384), 2D=(16384,16384), 3D=(16384,16384,8192)
+  Max Layered Texture Size (dim) x layers        1D=(16384) x 8192, 2D=(16384,16384) x 8192
+  Total amount of constant memory:               2147483647 bytes
+  Total amount of shared memory per block:       65536 bytes
+  Total number of registers available per block: 196608
+  Warp size:                                     32
+  Maximum number of threads per block:           1024
+  Maximum sizes of each dimension of a block:    1024 x 1024 x 1024
+  Maximum sizes of each dimension of a grid:     2147483647 x 65536 x 65536
+  Maximum memory pitch:                          2147483647 bytes
+  Texture alignment:                             256 bytes
+  Concurrent copy and execution:                 Yes with 8 copy engine(s)
+  Run time limit on kernels:                     No
+  Integrated GPU sharing Host Memory:            No
+  Support host page-locked memory mapping:       Yes
+  Concurrent kernel execution:                   Yes
+  Alignment requirement for Surfaces:            Yes
+  Device has ECC support enabled:                No
+  Device is using TCC driver mode:               No
+  Device supports Unified Addressing (UVA):      No
+  Device PCI Bus ID / PCI location ID:           163 / 0
+  Compute Mode:
+      Default (multiple host threads can use ::cudaSetDevice() with device simultaneously) 
+
+deviceQuery, CUDA Driver = CUDART, CUDA Driver Version  = 70253.11, CUDA Runtime Version = 70253.11, NumDevs = 1
+
+[ERR]  {GetWidth}  Display width is 0.
+[ERR]  {GetHeight}  Display height is 0.
+amdgpu: os_same_file_description couldn't determine if two DRM fds reference the same file description.
+If they do, bad things may happen!
+======================================================================
+  Ultralytics YOLO26x Production Video Pipeline on AMD Radeon
+  Ultralytics ONNX + MIGraphX EP | OpenCV HIP video | no VLM
+======================================================================
+
+[pipeline] AMD GPU via HIP: 1 device(s) available
+[pipeline] Input: data/sidewalk.mp4 (1920x1080 @ 25.0fps, 393 frames) | decode: rocdecode
+[pipeline] Output: output/benchmarks/direct_copy_audit/output.mp4 | encode: vaapi-direct
+
+[detector] Loading YOLO26x ONNX through Ultralytics...
+[detector] MIGraphX cache identity: 735f1583e99dfeb733da
+Loading /workspace/models/yolo26x.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.24.2 with MIGraphXExecutionProvider
+[0;93m2026-09-03 04:00:21.902989559 [W:onnxruntime:Default, migraphx_execution_provider.cc:167 MIGraphXExecutionProvider] [MIGraphX EP] MIGraphX ENV Override Variables Set:[m
+MIGraphX FP16 provider option is enabled; model input remains FP32.
+[detector] Ultralytics ONNX + MIGraphX EP (FP16, GPU I/O binding) ready; output=(1, 300, 6)
+{
+  "owner": "ultralytics.YOLO",
+  "ultralytics_format": "onnx",
+  "provider": "MIGraphXExecutionProvider",
+  "providers": [
+    "MIGraphXExecutionProvider",
+    "CPUExecutionProvider"
+  ],
+  "provider_options": {
+    "migraphx_model_cache_dir": "\"/workspace/models/ort-migraphx-cache/735f1583e99dfeb733da\"",
+    "device_id": "0",
+    "migraphx_external_alloc": "0",
+    "migraphx_fp8_enable": "0",
+    "migraphx_int8_enable": "0",
+    "migraphx_bf16_enable": "0",
+    "migraphx_mem_limit": "18446744073709551615",
+    "migraphx_int8_calibration_table_name": "",
+    "migraphx_fp16_enable": "1",
+    "migraphx_int8_use_native_calibration_table": "0",
+    "migraphx_arena_extend_strategy": "kNextPowerOfTwo",
+    "migraphx_exhaustive_tune": "0",
+    "migraphx_external_free": "0",
+    "migraphx_external_empty_cache": "0"
+  },
+  "io_binding": true,
+  "migraphx_fp16": true,
+  "cache_dir": "/workspace/models/ort-migraphx-cache/735f1583e99dfeb733da",
+  "cache_identity": {
+    "schema_version": 1,
+    "onnx_file": "yolo26x.onnx",
+    "onnx_sha256": "88568299de91d4967f239a062c9f1619f695ebd05de73cd66b8f589591aaeb0a",
+    "gpu_arch": "gfx1100",
+    "gpu_name": "AMD Radeon PRO W7900D",
+    "torch": "2.9.1+gitff65f5b",
+    "torch_hip": "7.2.53211-e1a6bc5663",
+    "migraphx": "2.15.0.dev+20250912-17-200-gde19b73ad",
+    "onnxruntime": "1.24.2",
+    "ultralytics": "8.4.75",
+    "ultralytics_commit": "34e213ca3ece4c18962f5bb922ec74da0c474d24",
+    "patch_sha256": "6c43dc90ae70bf61fc3f42634322d6a604a4a55cdc1542e5ea58f00af661c620",
+    "provider": "MIGraphXExecutionProvider",
+    "fp16": true,
+    "input_shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "output_shape": [
+      1,
+      300,
+      6
+    ]
+  },
+  "output_pointer": 133869789511680
+}
+
+[pipeline] Starting pipeline...
+----------------------------------------------------------------------
+
+======================================================================
+  Pipeline Complete
+  Frames: 30 | Total: 1.00s | Avg FPS: 29.9
+  Host load average: 187.55, 199.63, 192.57 | logical CPUs: 128
+  Video decode:    rocdecode   |   Video encode: vaapi-direct
+  Avg Preprocess:  6.29ms/frame (GPU/HIP)
+  Avg Detection:   15.28ms/frame (ultralytics-migraphx)
+  Avg Frame D2H:   0.00ms/frame
+  Avg CPU overlay: 0.00ms/frame (HIP overlay active)
+  Avg Direct encode feed: 2.86ms/frame
+  Avg GPU overlay + direct encode worker: 12.68ms/frame
+  Direct encode queue: depth=3 | submitted=30 | encoded=30
+  Output saved to: output/benchmarks/direct_copy_audit/output.mp4
+======================================================================
+Input Video Information
+	Codec        : AVC/H.264
+	Frame rate   : 50/2 = 25 fps
+	Sequence     : Progressive
+	Coded size   : [1920, 1088]
+	Display area : [0, 0, 1920, 1080]
+	Chroma       : YUV 420
+	Bit depth    : 8
+Video Decoding Params:
+	Num Surfaces : 7
+	Crop         : [0, 0, 1920, 1080]
+	Resize       : 1920x1080
+
+W20260903 04:00:29.322694 133885012663808 simple_timer.cpp:55] [rocprofv3] '/opt/venv/bin/python3 src/pipeline.py --input data/sidewalk.mp4 --output output/benchmarks/direct_copy_audit/output.mp4 --no-vlm --max-frames 30 --video-decode rocdecode --video-encode vaapi --gpu-direct-encode on' ::    23.587629 sec
+E20260903 04:00:29.391759 133885012663808 output_stream.cpp:111] Opened result file: /workspace/output/benchmarks/direct_copy_audit/63b4c365f17e/1734_memory_copy_trace.csv
+ring_buffer: munmap failed: Invalid argument
+F20260903 04:00:29.391848 133885012663808 ring_buffer.cpp:106] mmap failed with errno 22 :: Invalid argument
+    @     0x79c49400ad90  (unknown)
+    @     0x79c49400bc28  (unknown)
+    @     0x79c493d0018c  (unknown)
+    @     0x79c493d0025e  (unknown)
+    @     0x79c493ce86ca  (unknown)
+    @     0x79c493d1fdf1  (unknown)
+    @     0x79c493ced4e7  (unknown)
+    @     0x79c493cb9425  (unknown)
+    @     0x79c493cbce1b  (unknown)
+    @     0x79c49349f9e0  (unknown)
+    @     0x79c4934a0132  (unknown)
+    @     0x79c493142ee8  (unknown)
+    @     0x79c49349b85b  (unknown)
+    @     0x79c493ca2871  (unknown)
+    @     0x79c493ca7681  (unknown)
+    @     0x79c4930d2d90  (unknown)
+    @     0x79c4930d2e40  __libc_start_main
+    @     0x6417138b7b45  _start
+W20260903 04:00:29.910551 133885012663808 tool.cpp:3104] [PPID=1727][PID=1734][TID=1734][rocprofv3_error_signal_handler] rocprofv3 caught signal 6...
+W20260903 04:00:29.910638 133885012663808 tool.cpp:3127] [PPID=1727][PID=1734][TID=1734][rocprofv3_error_signal_handler] rocprofv3 will wait for 0 children to exit
+W20260903 04:00:29.910643 133885012663808 tool.cpp:3142] [PPID=1727][PID=1734][TID=1734][rocprofv3_error_signal_handler] rocprofv3 finalizing after signal 6...
+W20260903 04:00:29.910654 133885012663808 tool.cpp:3184] [PPID=1727][PID=1734][TID=1734][rocprofv3_error_signal_handler] rocprofv3 found chained signal handler for 6... executing chained sigaction (SIGINFO)
+W20260903 04:00:29.910747 133885012663808 tool.cpp:3104] [PPID=1727][PID=1734][TID=1734][rocprofv3_error_signal_handler] rocprofv3 caught signal 6...

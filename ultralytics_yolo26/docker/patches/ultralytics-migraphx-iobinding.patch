@@ -1,0 +1,88 @@
+diff --git a/ultralytics/nn/autobackend.py b/ultralytics/nn/autobackend.py
+index 2796079..2d1ecfe 100644
+--- a/ultralytics/nn/autobackend.py
++++ b/ultralytics/nn/autobackend.py
+@@ -311,9 +311,10 @@ class AutoBackend(nn.Module):
+             im = torch.empty(*imgsz, dtype=torch.half if self.fp16 else torch.float, device=self.device)  # input
+             for _ in range(2 if self.format == "torchscript" else 1):
+                 self.forward(im)  # warmup model
+-                warmup_boxes = torch.rand(1, 84, 16, device=self.device)  # 16 boxes works best empirically
+-                warmup_boxes[:, :4] *= imgsz[-1]
+-                non_max_suppression(warmup_boxes)  # warmup NMS
++                if not self.end2end:
++                    warmup_boxes = torch.rand(1, 84, 16, device=self.device)  # 16 boxes works best empirically
++                    warmup_boxes[:, :4] *= imgsz[-1]
++                    non_max_suppression(warmup_boxes)  # warmup NMS
+ 
+     @staticmethod
+     def _model_type(p: str = "path/to/model.pt", dnn: bool = False) -> str:
+diff --git a/ultralytics/nn/backends/onnx.py b/ultralytics/nn/backends/onnx.py
+index 55430f0..74ec3f3 100644
+--- a/ultralytics/nn/backends/onnx.py
++++ b/ultralytics/nn/backends/onnx.py
+@@ -18,7 +18,7 @@ class ONNXBackend(BaseBackend):
+     """Microsoft ONNX Runtime inference backend with optional OpenCV DNN support.
+ 
+     Loads and runs inference with ONNX models (.onnx files) using Microsoft ONNX Runtime with MIGraphX/CUDA/CoreML
+-    execution providers, or OpenCV DNN for lightweight CPU inference. Supports IO binding for optimized CUDA inference
++    execution providers, or OpenCV DNN for lightweight CPU inference. Supports IO binding for optimized GPU inference
+     with static input shapes.
+     """
+ 
+@@ -68,7 +68,8 @@ class ONNXBackend(BaseBackend):
+             # Select execution provider
+             available = onnxruntime.get_available_providers()
+             device_id = self.device.index if isinstance(self.device, torch.device) and self.device.index else 0
+-            use_cuda_io_binding = False
++            use_gpu_io_binding = False
++            session_options = None
+             if gpu and "MIGraphXExecutionProvider" in available:
+                 migraphx_options = {"device_id": str(device_id)}
+                 if requested_fp16:
+@@ -76,9 +77,16 @@ class ONNXBackend(BaseBackend):
+                 if cache_dir := os.environ.get("ULTRALYTICS_MIGRAPHX_CACHE_DIR"):
+                     migraphx_options["migraphx_model_cache_dir"] = cache_dir
+                 providers = [("MIGraphXExecutionProvider", migraphx_options), "CPUExecutionProvider"]
++                use_gpu_io_binding = True
++                session_options = onnxruntime.SessionOptions()
++                session_options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
++                session_options.intra_op_num_threads = int(os.environ.get("ULTRALYTICS_MIGRAPHX_INTRA_OP_THREADS", "1"))
++                session_options.inter_op_num_threads = 1
++                session_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
++                session_options.add_session_config_entry("session.inter_op.allow_spinning", "0")
+             elif gpu and "CUDAExecutionProvider" in available:
+                 providers = [("CUDAExecutionProvider", {"device_id": device_id}), "CPUExecutionProvider"]
+-                use_cuda_io_binding = True
++                use_gpu_io_binding = True
+             elif self.device.type == "mps" and "CoreMLExecutionProvider" in available:
+                 providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+             else:
+@@ -92,7 +100,7 @@ class ONNXBackend(BaseBackend):
+                 f"{providers[0] if isinstance(providers[0], str) else providers[0][0]}"
+             )
+ 
+-            self.session = onnxruntime.InferenceSession(weight, providers=providers)
++            self.session = onnxruntime.InferenceSession(weight, sess_options=session_options, providers=providers)
+             self.providers = self.session.get_providers()
+             self.provider = self.providers[0] if self.providers else None
+             self.provider_options = self.session.get_provider_options()
+@@ -110,8 +118,8 @@ class ONNXBackend(BaseBackend):
+             if self.migraphx_fp16 and not self.fp16:
+                 LOGGER.info("MIGraphX FP16 provider option is enabled; model input remains FP32.")
+ 
+-            # Setup IO binding for CUDA
+-            self.use_io_binding = not self.dynamic and use_cuda_io_binding
++            # Setup IO binding for static-shape GPU providers
++            self.use_io_binding = not self.dynamic and use_gpu_io_binding
+             if self.use_io_binding:
+                 self.io = self.session.io_binding()
+                 self.bindings = []
+@@ -131,7 +139,7 @@ class ONNXBackend(BaseBackend):
+                     self.bindings.append(y_tensor)
+ 
+     def forward(self, im: torch.Tensor) -> torch.Tensor | list[torch.Tensor] | np.ndarray:
+-        """Run ONNX inference using IO binding (CUDA) or standard session execution.
++        """Run ONNX inference using GPU IO binding or standard session execution.
+ 
+         Args:
+             im (torch.Tensor): Input image tensor in BCHW format, normalized to [0, 1].

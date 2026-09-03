@@ -1,0 +1,145 @@
+{
+  "schema_version": 3,
+  "status": "PASS",
+  "package": "ultralytics_yolo26",
+  "runtime_identity": {
+    "schema_version": 1,
+    "onnx_file": "yolo26x.onnx",
+    "onnx_sha256": "88568299de91d4967f239a062c9f1619f695ebd05de73cd66b8f589591aaeb0a",
+    "gpu_arch": "gfx1100",
+    "gpu_name": "AMD Radeon PRO W7900D",
+    "torch": "2.9.1+gitff65f5b",
+    "torch_hip": "7.2.53211-e1a6bc5663",
+    "migraphx": "2.15.0.dev+20250912-17-200-gde19b73ad",
+    "onnxruntime": "1.24.2",
+    "ultralytics": "8.4.75",
+    "ultralytics_commit": "34e213ca3ece4c18962f5bb922ec74da0c474d24",
+    "patch_sha256": "6c43dc90ae70bf61fc3f42634322d6a604a4a55cdc1542e5ea58f00af661c620",
+    "provider": "MIGraphXExecutionProvider",
+    "fp16": true,
+    "input_shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "output_shape": [
+      1,
+      300,
+      6
+    ],
+    "checkpoint_sha256": "9fdd44a31c504547ffb81d2c6d9e6dac3493c8eaa8b0398d3f43bae6c7003e92",
+    "hip_vaapi_bridge_sha256": "c239bb1752f9d2724bf83d60418f18a6c78f8fa373fc591ed3237dd9e91496c1",
+    "vision_source_sha256": {
+      "src/pipeline.py": "9f88d10df44407ee96131300f16492511b85bbe2e556964c83f3f044ac18c9ae",
+      "src/video_io.py": "b09f08f5ae75ae5b974a3fe1d8a428cb5046b99db9aafe3faf67c0e8cda34d0b",
+      "src/detector.py": "de9900758278c170f757b53a98b5e01cc4a9bc63d7a1745504ef0e3589054498",
+      "src/preprocess.py": "86c0af294cb69a674bdd9c2dd869d7b0331909bfe111840aaaf73f6cb6d1c643",
+      "src/postprocess.py": "3f14d980548388dc1e952bccc06d2f2bb68abb10257e7c73d8e8e638d9ba03fb",
+      "native/hip_vaapi_bridge.cpp": "c239bb1752f9d2724bf83d60418f18a6c78f8fa373fc591ed3237dd9e91496c1"
+    },
+    "onnxruntime_providers": [
+      "MIGraphXExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "torch_gpu": "AMD Radeon PRO W7900D"
+  },
+  "models": {
+    "yolo26x.pt": {
+      "bytes": 118667365,
+      "sha256": "9fdd44a31c504547ffb81d2c6d9e6dac3493c8eaa8b0398d3f43bae6c7003e92"
+    },
+    "yolo26x.onnx": {
+      "bytes": 223287479,
+      "sha256": "88568299de91d4967f239a062c9f1619f695ebd05de73cd66b8f589591aaeb0a"
+    }
+  },
+  "pipeline": {
+    "source": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 25.0,
+      "frames": 393,
+      "duration_seconds": 15.72,
+      "codec": "h264",
+      "profile": "High",
+      "pixel_format": "yuv420p",
+      "frame_rate": "25/1",
+      "probe_duration_seconds": 15.72,
+      "container_samples": 393,
+      "packets": 393,
+      "decoded_frames": 393
+    },
+    "yolo_video": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 25.0,
+      "frames": 393,
+      "duration_seconds": 15.72,
+      "codec": "h264",
+      "profile": "High",
+      "pixel_format": "yuv420p",
+      "frame_rate": "25/1",
+      "probe_duration_seconds": 15.72,
+      "container_samples": 393,
+      "packets": 393,
+      "decoded_frames": 393
+    },
+    "final_video": {
+      "width": 1920,
+      "height": 1220,
+      "fps": 25.0,
+      "frames": 393,
+      "duration_seconds": 15.72,
+      "codec": "h264",
+      "profile": "High",
+      "pixel_format": "yuv420p",
+      "frame_rate": "25/1",
+      "probe_duration_seconds": 15.72,
+      "container_samples": 393,
+      "packets": 393,
+      "decoded_frames": 393
+    },
+    "performance": {
+      "fps": 74.7,
+      "preprocess_ms": 0.59,
+      "detection_ms": 10.44,
+      "frame_d2h_ms": 0.0,
+      "direct_encode_feed_ms": 0.15,
+      "gpu_overlay_direct_encode_worker_ms": 7.85,
+      "host_load_1m": 218.12,
+      "direct_encode_queue_depth": 3,
+      "direct_encode_submitted_frames": 393,
+      "direct_encode_encoded_frames": 393
+    },
+    "segments": 4,
+    "backend": "llamacpp",
+    "model": "/models/Qwen3-VL-8B-Instruct-Q8_0.gguf"
+  },
+  "artifacts": {
+    "01_yolo_base.mp4": {
+      "bytes": 12179315,
+      "sha256": "ad07dc52103673611ed6e55674342c6d5fddbfcd2f1349f1bd278f0c10a71307"
+    },
+    "01_yolo_base.log": {
+      "bytes": 6243,
+      "sha256": "001bb1e8b11ef8e4fe000702e306477cb4c17de9f18225892304d2cc2087a1c1"
+    },
+    "02_llamacpp_q8_timeline.json": {
+      "bytes": 2436,
+      "sha256": "910a62cfa32498b96fb2f5202a3d34704d378c01b3d0f62ee51a73dbd7227017"
+    },
+    "02_llamacpp_q8_subtitle.log": {
+      "bytes": 666,
+      "sha256": "c2d00943a472e4621fc51b1ab9f92dbfb5a8f5cca5730b91c6af6a12d8bfeaee"
+    },
+    "03_final_llamacpp_q8.mp4": {
+      "bytes": 9338713,
+      "sha256": "cd49337ecc6b7b78f836115bc9b4aab441de732868c8a8c0645ea91f44885ae7"
+    }
+  },
+  "notebooks": [
+    "ultralytics_yolo26x_step_by_step.ipynb",
+    "ultralytics_yolo26x_end_to_end.ipynb"
+  ]
+}

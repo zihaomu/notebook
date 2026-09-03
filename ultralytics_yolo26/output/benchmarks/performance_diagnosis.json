@@ -1,0 +1,136 @@
+{
+  "date": "2026-09-03",
+  "host": {
+    "logical_cpus": 128,
+    "observed_load_average_range": [
+      176.31,
+      209.43
+    ],
+    "note": "Shared validation host under severe CPU load"
+  },
+  "model_identity": {
+    "historical_onnx": {
+      "sha256": "97d5165312f2d1957a24d7ae27863a98860ac88656d40fdac8f10de77999bc35",
+      "bytes": 223209857,
+      "ultralytics": "8.4.115",
+      "simplify": false,
+      "nodes": 672
+    },
+    "official_release_onnx": {
+      "sha256": "88568299de91d4967f239a062c9f1619f695ebd05de73cd66b8f589591aaeb0a",
+      "bytes": 223287479,
+      "metadata_ultralytics": "8.4.41",
+      "simplify": true,
+      "nodes": 606
+    }
+  },
+  "steady_state_residency": {
+    "iterations": 50,
+    "native_memory_copy_records": 0,
+    "ort_iobinding_memory_copy_records": 0,
+    "tool": "rocprofv3 --memory-copy-trace with MEASURE_YOLO NVTX range"
+  },
+  "same_input_official_onnx": {
+    "native_migraphx_mean_ms": 7.109,
+    "maximum_output_absolute_delta": 0.0,
+    "note": "Representative same-GPU run; host-load jitter varied ORT mean across runs",
+    "ultralytics_ort_mean_ms_range": [
+      7.374,
+      7.8
+    ]
+  },
+  "same_host_back_to_back_full_pipeline": {
+    "gpu": "W7900D physical GPU2",
+    "vaapi": "/dev/dri/renderD130",
+    "historical_native_fps": 27.4,
+    "ultralytics_ort_fps": 29.8
+  },
+  "video_boundary_ab": {
+    "gpu_only_fps": 65.4,
+    "plus_full_frame_d2h_and_cpu_overlay_fps": 59.66,
+    "plus_raw_bgr_ffmpeg_vaapi_fps": 31.08,
+    "writer_only_fps_range": [
+      31.43,
+      41.71
+    ]
+  },
+  "fixed_regression": {
+    "description": "Removed main-thread np.ascontiguousarray(frame).tobytes() and passed the NumPy frame to the writer worker, which writes through memoryview",
+    "bytes_copied_per_1080p_frame_before_fix": 6220800,
+    "historical_writer_also_used_tobytes": true
+  },
+  "conclusion": "The historical slowdown was caused by post-detection full-frame D2H, CPU overlay, and raw BGR VA-API upload, not Ultralytics/ORT tensor residency. The current no-VLM vision pass removes those full-frame host boundaries with asynchronous HIP overlay into a separate DRM PRIME VAAPI encoder surface.",
+  "legacy_formal_workflow": {
+    "fps": 37.1,
+    "host_load_1m": 181.36,
+    "frames": 393,
+    "input_fps": 25.0
+  },
+  "direct_encode_resolution": {
+    "implementation": {
+      "overlay": "HIP RGB-to-NV12 plus box, label, and status text",
+      "surface": "FFmpeg-owned linear NV12 VAAPI surface exported as DRM PRIME 2",
+      "transport": "HIP external memory -> same VAAPI surface -> h264_vaapi",
+      "decode_surface_passthrough": false,
+      "scheduling": "bounded queue depth 3, producer event, dedicated HIP stream",
+      "bridge_sha256": "c239bb1752f9d2724bf83d60418f18a6c78f8fa373fc591ed3237dd9e91496c1"
+    },
+    "formal_workflow": {
+      "frames": 393,
+      "fps": 74.7,
+      "host_load_1m": 218.12,
+      "preprocess_ms_per_frame": 0.59,
+      "detection_ms_per_frame": 10.44,
+      "full_frame_d2h_ms_per_frame": 0.0,
+      "direct_encode_feed_ms_per_frame": 0.15,
+      "gpu_overlay_direct_encode_worker_ms_per_frame": 7.85,
+      "queue_depth": 3,
+      "submitted_frames": 393,
+      "encoded_frames": 393
+    },
+    "independent_repeat": {
+      "frames": 393,
+      "fps": 71.9,
+      "host_load_1m": 209.15,
+      "full_frame_d2h_ms_per_frame": 0.0
+    },
+    "strict_output_accounting": {
+      "codec": "h264 High",
+      "pixel_format": "yuv420p",
+      "duration_seconds": 15.72,
+      "packets": 393,
+      "container_samples": 393,
+      "decoded_frames": 393
+    },
+    "pixel_audit": {
+      "sample_frames": [
+        0,
+        100,
+        200,
+        300,
+        392
+      ],
+      "minimum_changed_pixels": 35314,
+      "minimum_status_near_white_pixels": 1938,
+      "status": "PASS"
+    },
+    "profiler_export_limitation": {
+      "tool": "rocprofv3 ROCm 7.2.1",
+      "application_completed": true,
+      "application_frames": [
+        30,
+        8
+      ],
+      "formats_attempted": [
+        "csv",
+        "json"
+      ],
+      "error": "ring_buffer mmap failed with errno 22 during result export",
+      "csv_bytes": 0,
+      "json_bytes": 28426240,
+      "json_complete": false,
+      "counted_as_copy_trace_evidence": false,
+      "note": "The prior MEASURE_YOLO inference-only marker trace remains valid. No whole-loop memory-copy claim is derived from the failed exports."
+    }
+  }
+}

@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Large model files are mounted locally or supplied by the cloud template.
+models/*.onnx
+models/*.mxr
+models/*.pt
+models/*.gguf
+models/*.log
+models/*.part
+models/.cache/
+models/ort-migraphx-cache/
+!models/README.md
+
+# Keep the verified pipeline artifacts, ignore ad-hoc output elsewhere.
+output/*
+!output/.gitkeep
+!output/pipeline/
+!output/pipeline/**
+!output/benchmarks/
+!output/benchmarks/**
+.build/
+
+native/build/

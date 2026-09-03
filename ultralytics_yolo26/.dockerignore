@@ -1,0 +1,9 @@
+**
+!docker/
+!docker/Dockerfile
+!docker/start-jupyter.sh
+!docker/validate-image.py
+!native/
+!native/hip_vaapi_bridge.cpp
+!scripts/
+!scripts/build_native_bridge.sh
