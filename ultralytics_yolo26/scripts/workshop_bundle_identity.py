@@ -22,19 +22,14 @@ ROOT_DIRECTORIES = (
     "data",
     "docker",
     "native",
+    "doc/speedup_blog",
     "output/benchmarks",
     "output/pipeline",
     "scripts",
     "src",
     "tests",
 )
-MODEL_FILES = (
-    "models/README.md",
-    "models/yolo26x.pt",
-    "models/yolo26x.onnx",
-    "models/ort-migraphx-cache/735f1583e99dfeb733da/identity.json",
-    "models/ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr",
-)
+MODEL_FILES: tuple[str, ...] = ()
 
 
 def bundle_files(root: Path) -> list[Path]:

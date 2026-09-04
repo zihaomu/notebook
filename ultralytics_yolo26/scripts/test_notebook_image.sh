@@ -2,7 +2,7 @@
 set -euo pipefail
 
 package_root="${PACKAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-image="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1-baked}"
+image="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1-full}"
 gpu="${PIPELINE_GPU:-0}"
 vaapi_device="${VAAPI_DEVICE:-/dev/dri/renderD128}"
 

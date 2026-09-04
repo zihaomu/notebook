@@ -122,20 +122,20 @@ bash scripts/build_notebook_image.sh
 生成：
 
 ```text
-zihao/ultralytics-yolo26-workshop:rocm7.2.1-baked
+zihao/ultralytics-yolo26-workshop:rocm7.2.1-full
 ```
 
 发布到 ACR 的固定标签：
 
 ```text
-crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop_2026_09_03
+crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04
 ```
 
-这个专用镜像在 `/workspace` 内完整包含 workshop、官方 YOLO26x PT/ONNX、已验证的 `gfx1100` MIGraphX `.mxr`、保存后的 notebook/结果、patched Ultralytics、ORT MIGraphX，以及两个 build-time native 工件：pybind HIP/DRM PRIME/VA-API encoder 和 standalone surface capability probe。OpenCV HIP 与 rocDecode 从固定 base image 继承。
+full 专用镜像在 `/workspace` 内包含完整 workshop，并在 `/opt/ultralytics-yolo26/models` 内固定保存四个模型文件、正式 `gfx1100` MIGraphX `.mxr`、patched Ultralytics、ORT MIGraphX，以及两个 build-time native 工件：pybind HIP/DRM PRIME/VA-API encoder 和 standalone surface capability probe。OpenCV HIP 与 rocDecode 从固定 base image 继承。
 
-不可变 seed 另存于 `/opt/ultralytics-yolo26/seed`；启动时会向挂载的数据卷补齐缺失的 YOLO/cache/output 文件。运行容器不再用宿主源码覆盖 `/workspace`，只持久化 `models/` 与 `output/`。Qwen3-VL GGUF 约 10 GB，并且需与 llama.cpp 容器共享，因此继续作为运行时数据卷。
+pipeline 直接读取镜像内不可变模型目录。由于 llama.cpp 是独立容器，启动脚本首次将镜像内模型按 SHA 校验后复制到 named volume `ultralytics_yolo26_models`，再以 `/models:ro` 挂给 llama.cpp；不再需要网络下载或宿主模型 bind mount。模型在镜像层只存一份，`/workspace` 不保留第二份。
 
-OCI label 记录源码 commit、base image、Ultralytics patch、bridge source、bundle、YOLO PT/ONNX 和 MIGraphX cache 的 SHA-256。`scripts/test_notebook_image.sh` 在无网络、无源码挂载、只读根文件系统下执行，证明编译和运行时 bundle 确实自包含。
+OCI label 记录源码 commit、base image、Ultralytics patch、bridge source、bundle、四个模型和 MIGraphX cache 的 SHA-256。`scripts/test_notebook_image.sh` 在无网络、无源码/模型挂载、只读根文件系统下执行，证明编译环境和全部模型确实自包含。
 
 ## 启动
 

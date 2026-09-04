@@ -11,6 +11,14 @@ import sys
 from pathlib import Path
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(8 * 1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def main() -> None:
     workspace = Path(
         os.environ.get("ULTRALYTICS_YOLO26_ROOT", "/workspace")
@@ -18,6 +26,14 @@ def main() -> None:
     if workspace != Path("/workspace"):
         raise RuntimeError(f"Expected workspace /workspace, got {workspace}")
     seed_root = Path("/opt/ultralytics-yolo26/seed")
+    model_root = Path(
+        os.environ.get(
+            "ULTRALYTICS_YOLO26_MODEL_DIR",
+            "/opt/ultralytics-yolo26/models",
+        )
+    ).resolve()
+    if model_root != Path("/opt/ultralytics-yolo26/models"):
+        raise RuntimeError(f"Expected baked model root, got {model_root}")
     if os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE") != "baked":
         raise RuntimeError("Image does not declare a baked workshop bundle")
 
@@ -26,10 +42,14 @@ def main() -> None:
         workspace / "tests/test_ultralytics_migraphx_backend.py",
         workspace / "src/video_io.py",
         workspace / "data/sidewalk.mp4",
-        workspace / "models/yolo26x.pt",
-        workspace / "models/yolo26x.onnx",
-        workspace / "models/ort-migraphx-cache/735f1583e99dfeb733da/identity.json",
-        workspace / "models/ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr",
+        model_root / "yolo26x.pt",
+        model_root / "yolo26x.onnx",
+        model_root / "Qwen3-VL-8B-Instruct-Q8_0.gguf",
+        model_root / "mmproj-F16.gguf",
+        model_root / "SHA256SUMS",
+        model_root / "MODEL_SET_ID",
+        model_root / "ort-migraphx-cache/735f1583e99dfeb733da/identity.json",
+        model_root / "ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr",
         workspace / "ultralytics_yolo26x_step_by_step.ipynb",
         workspace / "ultralytics_yolo26x_end_to_end.ipynb",
         seed_root / "scripts/workshop_bundle_identity.py",
@@ -73,24 +93,65 @@ def main() -> None:
     if "align_corners" not in (cv2.cuda.resize.__doc__ or ""):
         raise RuntimeError("OpenCV HIP resize align_corners support is missing")
 
+    declared_models = {}
+    for line in (model_root / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
+        checksum, relative = line.split(maxsplit=1)
+        declared_models[relative] = checksum
+    expected_model_files = {
+        "yolo26x.pt",
+        "yolo26x.onnx",
+        "Qwen3-VL-8B-Instruct-Q8_0.gguf",
+        "mmproj-F16.gguf",
+        "ort-migraphx-cache/735f1583e99dfeb733da/identity.json",
+        "ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr",
+    }
+    if set(declared_models) != expected_model_files:
+        raise RuntimeError(f"Unexpected baked model manifest: {declared_models}")
+    actual_models = {
+        relative: sha256(model_root / relative)
+        for relative in sorted(declared_models)
+    }
+    for relative, expected in declared_models.items():
+        if actual_models[relative] != expected:
+            raise RuntimeError(f"Baked model manifest mismatch: {relative}")
+    model_set_id = (model_root / "MODEL_SET_ID").read_text(encoding="utf-8").strip()
+    expected_model_set_id = sha256(model_root / "SHA256SUMS")
+    if model_set_id != expected_model_set_id:
+        raise RuntimeError(
+            f"Model set identity mismatch: {model_set_id} != {expected_model_set_id}"
+        )
+    declared_model_set_id = os.environ.get("ULTRALYTICS_MODEL_SET_SHA256", "")
+    if model_set_id != declared_model_set_id:
+        raise RuntimeError(
+            f"Declared model set mismatch: {model_set_id} != {declared_model_set_id}"
+        )
+
     identities = {
         "bundle": (
             compute_bundle_sha256(seed_root),
             os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE_SHA256", ""),
         ),
         "checkpoint": (
-            hashlib.sha256((workspace / "models/yolo26x.pt").read_bytes()).hexdigest(),
+            actual_models["yolo26x.pt"],
             os.environ.get("ULTRALYTICS_YOLO26_CHECKPOINT_SHA256", ""),
         ),
         "onnx": (
-            hashlib.sha256((workspace / "models/yolo26x.onnx").read_bytes()).hexdigest(),
+            actual_models["yolo26x.onnx"],
             os.environ.get("ULTRALYTICS_YOLO26_ONNX_SHA256", ""),
         ),
         "migraphx_cache": (
-            hashlib.sha256(
-                (workspace / "models/ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr").read_bytes()
-            ).hexdigest(),
+            actual_models[
+                "ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr"
+            ],
             os.environ.get("ULTRALYTICS_MIGRAPHX_CACHE_SHA256", ""),
+        ),
+        "qwen_gguf": (
+            actual_models["Qwen3-VL-8B-Instruct-Q8_0.gguf"],
+            os.environ.get("ULTRALYTICS_QWEN_GGUF_SHA256", ""),
+        ),
+        "qwen_mmproj": (
+            actual_models["mmproj-F16.gguf"],
+            os.environ.get("ULTRALYTICS_QWEN_MMPROJ_SHA256", ""),
         ),
     }
     for name, (actual, expected) in identities.items():
@@ -103,9 +164,12 @@ def main() -> None:
     ).read_text(encoding="utf-8").strip()
     if declared_bundle != identities["bundle"][0]:
         raise RuntimeError("Installed bundle identity file does not match the seed")
-    for qwen_name in ("Qwen3-VL-8B-Instruct-Q8_0.gguf", "mmproj-F16.gguf"):
-        if (seed_root / "models" / qwen_name).exists():
-            raise RuntimeError(f"Qwen runtime model was unexpectedly baked: {qwen_name}")
+    for relative in ("Qwen3-VL-8B-Instruct-Q8_0.gguf", "mmproj-F16.gguf"):
+        with (model_root / relative).open("rb") as stream:
+            if stream.read(4) != b"GGUF":
+                raise RuntimeError(f"Invalid baked GGUF header: {relative}")
+    if model_root.is_relative_to(workspace):
+        raise RuntimeError("Baked model root must not live under the mutable workspace")
 
     reader = RocDecodeReader(str(workspace / "data/sidewalk.mp4"), device_id=0)
     try:
@@ -205,7 +269,7 @@ def main() -> None:
         )
     )
     cache_root.mkdir(parents=True, exist_ok=True)
-    backend = validate_backend(workspace / "models/yolo26x.onnx", iterations=3)
+    backend = validate_backend(model_root / "yolo26x.onnx", iterations=3)
 
     result = {
         "workspace": str(workspace),
@@ -225,7 +289,10 @@ def main() -> None:
             "identities": {
                 name: actual for name, (actual, _) in identities.items()
             },
-            "qwen_models": "runtime-volume",
+            "model_root": str(model_root),
+            "model_set_id": model_set_id,
+            "model_files": sorted(declared_models),
+            "qwen_models": "baked-and-volume-exportable",
         },
         "standalone_vaapi_hip_probe": {
             "binary": "/usr/local/bin/vaapi-hip-encode-probe",

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 package_root="${PACKAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-image="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1-baked}"
+image="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1-full}"
 base_image="${BASE_IMAGE:-crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:opencv_end2end_2026_08_12}"
 ultralytics_repository="${ULTRALYTICS_REPOSITORY:-https://gh-test.anruicloud.com/zihaomu/ultralytics.git}"
 ultralytics_branch="${ULTRALYTICS_BRANCH:-add-onnx-migraphx-backend}"
@@ -25,6 +25,8 @@ for path in \
     "$package_root/scripts/workshop_bundle_identity.py" \
     "$package_root/models/yolo26x.pt" \
     "$package_root/models/yolo26x.onnx" \
+    "$package_root/models/Qwen3-VL-8B-Instruct-Q8_0.gguf" \
+    "$package_root/models/mmproj-F16.gguf" \
     "$cache_dir/identity.json" \
     "$cache_file" \
     "$patch_path"; do
@@ -40,7 +42,22 @@ patch_sha256=$(sha256sum "$patch_path" | cut -d' ' -f1)
 bridge_sha256=$(sha256sum "$package_root/native/hip_vaapi_bridge.cpp" | cut -d' ' -f1)
 checkpoint_sha256=$(sha256sum "$package_root/models/yolo26x.pt" | cut -d' ' -f1)
 onnx_sha256=$(sha256sum "$package_root/models/yolo26x.onnx" | cut -d' ' -f1)
+qwen_sha256=$(sha256sum "$package_root/models/Qwen3-VL-8B-Instruct-Q8_0.gguf" | cut -d' ' -f1)
+mmproj_sha256=$(sha256sum "$package_root/models/mmproj-F16.gguf" | cut -d' ' -f1)
 cache_sha256=$(sha256sum "$cache_file" | cut -d' ' -f1)
+[[ "$checkpoint_sha256" == "9fdd44a31c504547ffb81d2c6d9e6dac3493c8eaa8b0398d3f43bae6c7003e92" ]]
+[[ "$onnx_sha256" == "88568299de91d4967f239a062c9f1619f695ebd05de73cd66b8f589591aaeb0a" ]]
+[[ "$qwen_sha256" == "cb8616bf6ed228982d9e47d7b72b42195342efa26044b0ee1873e61d9e78d3d7" ]]
+[[ "$mmproj_sha256" == "d406d03ebabefdef86a2c86bf0c1b65f9e046f7a81c218f25de4931b46a07fc4" ]]
+[[ "$cache_sha256" == "a81a6a2a076855589102807d2af080025ae4ecd152005a59b00f3d08bb659781" ]]
+model_set_sha256=$(
+    cd "$package_root/models"
+    sha256sum \
+        yolo26x.pt yolo26x.onnx Qwen3-VL-8B-Instruct-Q8_0.gguf mmproj-F16.gguf \
+        ort-migraphx-cache/735f1583e99dfeb733da/identity.json \
+        ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr \
+        | sha256sum | cut -d' ' -f1
+)
 bundle_sha256=$(python3 "$package_root/scripts/workshop_bundle_identity.py" "$package_root")
 workshop_git_commit=$(git -C "$package_root" rev-parse HEAD)
 
@@ -79,7 +96,10 @@ echo "  I/O binding patch: $patch_sha256"
 echo "  HIP/VAAPI bridge:  $bridge_sha256"
 echo "  YOLO checkpoint:   $checkpoint_sha256"
 echo "  YOLO ONNX:         $onnx_sha256"
+echo "  Qwen3-VL GGUF:     $qwen_sha256"
+echo "  Qwen3-VL mmproj:   $mmproj_sha256"
 echo "  gfx1100 MXR cache: $cache_sha256"
+echo "  Model set:         $model_set_sha256"
 echo "  Workshop bundle:  $bundle_sha256"
 echo "  Workshop commit:  $workshop_git_commit"
 
@@ -96,6 +116,9 @@ docker buildx build \
     --build-arg "WORKSHOP_BUNDLE_SHA256=$bundle_sha256" \
     --build-arg "YOLO_CHECKPOINT_SHA256=$checkpoint_sha256" \
     --build-arg "YOLO_ONNX_SHA256=$onnx_sha256" \
+    --build-arg "QWEN_GGUF_SHA256=$qwen_sha256" \
+    --build-arg "QWEN_MMPROJ_SHA256=$mmproj_sha256" \
+    --build-arg "MODEL_SET_SHA256=$model_set_sha256" \
     --build-arg "MIGRAPHX_CACHE_SHA256=$cache_sha256" \
     --build-arg "WORKSHOP_GIT_COMMIT=$workshop_git_commit" \
     --build-context "ultralytics_source=$ultralytics_source" \

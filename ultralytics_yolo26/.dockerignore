@@ -10,6 +10,8 @@
 !doc/
 doc/*
 !doc/performance_diagnosis_CN.md
+!doc/speedup_blog/
+!doc/speedup_blog/**
 !docker/
 !docker/**
 !models/
@@ -17,6 +19,8 @@ models/*
 !models/README.md
 !models/yolo26x.pt
 !models/yolo26x.onnx
+!models/Qwen3-VL-8B-Instruct-Q8_0.gguf
+!models/mmproj-F16.gguf
 !models/ort-migraphx-cache/
 models/ort-migraphx-cache/*
 !models/ort-migraphx-cache/735f1583e99dfeb733da/

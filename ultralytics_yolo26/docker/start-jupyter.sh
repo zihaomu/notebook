@@ -16,7 +16,7 @@ if [[ ! -f "$seed_root/scripts/notebook_env.py" ]]; then
 fi
 
 export ULTRALYTICS_YOLO26_ROOT="$workspace"
-export ULTRALYTICS_YOLO26_MODEL_DIR="${ULTRALYTICS_YOLO26_MODEL_DIR:-$workspace/models}"
+export ULTRALYTICS_YOLO26_MODEL_DIR="${ULTRALYTICS_YOLO26_MODEL_DIR:-/opt/ultralytics-yolo26/models}"
 export ULTRALYTICS_YOLO26_OUTPUT_DIR="${ULTRALYTICS_YOLO26_OUTPUT_DIR:-$workspace/output}"
 export ULTRALYTICS_MIGRAPHX_CACHE_ROOT="${ULTRALYTICS_MIGRAPHX_CACHE_ROOT:-$ULTRALYTICS_YOLO26_MODEL_DIR/ort-migraphx-cache}"
 
@@ -25,31 +25,11 @@ export OPENCV_AMD_END2END_ROOT="$workspace"
 export OPENCV_AMD_END2END_MODEL_DIR="$ULTRALYTICS_YOLO26_MODEL_DIR"
 export OPENCV_AMD_END2END_OUTPUT_DIR="$ULTRALYTICS_YOLO26_OUTPUT_DIR"
 
-mkdir -p "$ULTRALYTICS_YOLO26_MODEL_DIR" "$ULTRALYTICS_YOLO26_OUTPUT_DIR" \
-    "$ULTRALYTICS_MIGRAPHX_CACHE_ROOT"
-
-seed_file() {
-    local relative="$1"
-    local source="$seed_root/$relative"
-    local target
-    case "$relative" in
-        models/*) target="$ULTRALYTICS_YOLO26_MODEL_DIR/${relative#models/}" ;;
-        output/*) target="$ULTRALYTICS_YOLO26_OUTPUT_DIR/${relative#output/}" ;;
-        *) echo "Unsupported seed path: $relative" >&2; return 2 ;;
-    esac
-    if [[ ! -f "$target" ]]; then
-        install -D -m 0644 "$source" "$target"
-    fi
+mkdir -p "$ULTRALYTICS_YOLO26_OUTPUT_DIR"
+[[ -f "$ULTRALYTICS_YOLO26_MODEL_DIR/SHA256SUMS" ]] || {
+    echo "Image is missing baked models at $ULTRALYTICS_YOLO26_MODEL_DIR." >&2
+    exit 1
 }
-
-seed_file models/yolo26x.pt
-seed_file models/yolo26x.onnx
-while IFS= read -r -d '' source; do
-    seed_file "${source#"$seed_root/"}"
-done < <(find "$seed_root/models/ort-migraphx-cache" -type f -print0)
-while IFS= read -r -d '' source; do
-    seed_file "${source#"$seed_root/"}"
-done < <(find "$seed_root/output" -type f -print0)
 
 cd "$workspace"
 

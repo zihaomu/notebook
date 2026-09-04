@@ -452,7 +452,7 @@ CSV 为空，JSON 在字符串中间截断。因此没有拿损坏文件宣称�
 ```bash
 docker pull \
   crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/\
-muzihao2/work:ultralytics-yolo26-workshop_2026_09_03
+muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04
 ```
 
 发布 digest：
@@ -470,27 +470,20 @@ sha256:0a2c267fbde48bf9f66216d10a28bb284684ed5c16b4b0ad153621ed67a9ff6c
 - compiled `hip_vaapi_bridge.so`
 - compiled `vaapi-hip-encode-probe`
 
-Qwen3-VL GGUF 继续通过 `models/` volume 与 llama.cpp 共享。
+四个模型固定存放在 `/opt/ultralytics-yolo26/models`。pipeline 直接读取该不可变目录；启动脚本按 SHA 将同一模型集初始化到 named volume `ultralytics_yolo26_models`，供独立 llama.cpp 容器以 `/models:ro` 使用，全程不再下载模型。
 
 ### 11.2 启动 notebook
 
 ```bash
 PIPELINE_IMAGE=crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/\
-muzihao2/work:ultralytics-yolo26-workshop_2026_09_03 \
+muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04 \
 PIPELINE_GPU=5 \
 LLAMA_GPU=5 \
 VAAPI_DEVICE=/dev/dri/renderD135 \
 bash scripts/start_notebook_container.sh
 ```
 
-脚本只挂载：
-
-```text
-/workspace/models
-/workspace/output
-```
-
-源码来自镜像，不再依赖宿主 `/workspace` bind mount。
+脚本只给 pipeline 挂载 `/workspace/output`；模型直接来自镜像固定目录。独立 llama.cpp 只读挂载初始化后的 `/models` named volume。源码和四个模型都不再依赖宿主 bind mount。
 
 ### 11.3 强制运行 direct path
 

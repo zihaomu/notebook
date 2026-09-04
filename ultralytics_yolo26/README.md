@@ -121,20 +121,20 @@ bash scripts/build_notebook_image.sh
 Default output image:
 
 ```text
-zihao/ultralytics-yolo26-workshop:rocm7.2.1-baked
+zihao/ultralytics-yolo26-workshop:rocm7.2.1-full
 ```
 
 Published registry tag:
 
 ```text
-crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop_2026_09_03
+crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04
 ```
 
-The dedicated image contains the complete workshop under `/workspace`, official YOLO26x PT/ONNX, the validated `gfx1100` MIGraphX `.mxr`, saved notebooks/results, patched Ultralytics, ORT MIGraphX, and two build-time native artifacts: the pybind HIP/DRM PRIME/VA-API encoder and the standalone surface capability probe. OpenCV HIP and rocDecode are inherited from the pinned base image.
+The full image contains the complete workshop under `/workspace`, all four model files under `/opt/ultralytics-yolo26/models`, the validated `gfx1100` MIGraphX `.mxr`, saved notebooks/results, patched Ultralytics, ORT MIGraphX, and two build-time native artifacts: the pybind HIP/DRM PRIME/VA-API encoder and the standalone surface capability probe. OpenCV HIP and rocDecode are inherited from the pinned base image.
 
-The immutable seed is also stored under `/opt/ultralytics-yolo26/seed`. At startup it fills missing YOLO/cache/output files in mounted data volumes. The source tree is no longer mounted over `/workspace`; only `models/` and `output/` are persistent. Qwen3-VL GGUF files remain runtime data because they add about 10 GB and are shared with the llama.cpp container.
+The pipeline reads the immutable model directory directly. Since llama.cpp runs in a separate container, the launcher checksum-copies the baked model set once into the named volume `ultralytics_yolo26_models`, then mounts that volume read-only at `/models` for llama.cpp. No network download or host model bind mount is required. The model files occur only once in the image layer; `/workspace` does not contain a second copy.
 
-OCI labels record the source commit, base image, Ultralytics patch, bridge source, bundle, YOLO PT/ONNX, and MIGraphX cache SHA-256 identities. `scripts/test_notebook_image.sh` runs with no network, no source mount, and a read-only root filesystem, proving the compiled/runtime bundle is actually self-contained.
+OCI labels record the source commit, base image, Ultralytics patch, bridge source, bundle, all four model SHA-256 values, and the MIGraphX cache identity. `scripts/test_notebook_image.sh` runs with no network, no source/model mount, and a read-only root filesystem, proving the compiled runtime and all models are self-contained.
 
 ## Start Locally
 

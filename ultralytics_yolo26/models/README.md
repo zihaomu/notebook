@@ -1,6 +1,6 @@
 # Workshop Model Assets
 
-The dedicated baked image already contains official YOLO26x PT/ONNX and the validated `gfx1100` MIGraphX cache. Its startup script seeds missing copies into an empty model volume. The first notebook cell still calls `scripts/model_setup.py` for strict validation and for the Qwen3-VL runtime assets; downloads are resumable, automatically retried, size/SHA-validated, and atomically installed.
+The full image stores one immutable copy of all four model files and the validated `gfx1100` MIGraphX cache under `/opt/ultralytics-yolo26/models`. The pipeline reads this directory directly. Since llama.cpp runs in a separate image, the launcher checksum-copies the same model set once to the named volume `ultralytics_yolo26_models` and mounts it read-only at `/models`. The first notebook cell still calls `scripts/model_setup.py`, but a valid full image performs verification without downloading anything.
 
 ## Official Ultralytics YOLO26x Assets
 
