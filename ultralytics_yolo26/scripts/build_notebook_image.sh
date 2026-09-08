@@ -165,6 +165,11 @@ computed_bundle=$(docker run --rm --entrypoint /opt/venv/bin/python3 "$image" \
 [[ "$built_companion" == "$companion_image_ref" ]]
 [[ "$built_bundle" == "$bundle_sha256" && "$computed_bundle" == "$bundle_sha256" ]]
 [[ "$built_model_set" == "$model_set_sha256" ]]
+docker run --rm --entrypoint sh "$image" -c '
+    test "$ULTRALYTICS_WORKSHOP_RELEASE_ID" = "$1" &&
+    test "$ULTRALYTICS_WORKSHOP_SOURCE_COMMIT" = "$2" &&
+    test "$ULTRALYTICS_COMPANION_IMAGE_REF" = "$3"
+' -- "$release_id" "$workshop_git_commit" "$companion_image_ref"
 
 docker image inspect "$image" --format \
     'Built {{index .RepoTags 0}} ({{.Id}}), workdir={{json .Config.WorkingDir}}'

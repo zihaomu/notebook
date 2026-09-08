@@ -124,6 +124,9 @@ def check_release_and_docs() -> str:
         "COPY release /opt/ultralytics-yolo26/seed/release",
         "io.ultralytics.release.id",
         "io.ultralytics.companion.digest",
+        "ULTRALYTICS_WORKSHOP_SOURCE_COMMIT=${WORKSHOP_GIT_COMMIT}",
+        "ULTRALYTICS_WORKSHOP_RELEASE_ID=${WORKSHOP_RELEASE_ID}",
+        "ULTRALYTICS_COMPANION_IMAGE_REF=${COMPANION_IMAGE_REF}",
     ):
         require(token in dockerfile, f"Dockerfile is missing {token}")
 
