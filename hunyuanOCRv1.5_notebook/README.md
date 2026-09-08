@@ -48,6 +48,10 @@ SSH_PORT=22223 ./scripts/status.sh
 ./scripts/stop.sh
 ```
 
-The main notebook is `hunyuan_ocr_demo.ipynb`. Run it from top to
-bottom. OCR cells start or reuse vLLM inside the container, so no separate shell
-command is needed.
+The main notebook is `hunyuan_ocr_demo.ipynb`. It intentionally ships with the
+verified 15-cell execution cache so users can inspect the expected tables,
+visualizations, timings, and diagnostics before rerunning it. `make check`
+requires continuous execution counts, at least one saved output per code cell,
+and no saved error output. Run it from top to bottom to reproduce the results;
+OCR cells start or reuse vLLM inside the container, so no separate shell command
+is needed.

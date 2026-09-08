@@ -30,6 +30,7 @@ def main() -> int:
     if len(cells) < 20:
         errors.append(f"expected at least 20 cells, found {len(cells)}")
     ids = []
+    code_cells = []
     text = ""
     for index, cell in enumerate(cells, 1):
         metadata = cell.get("metadata") or {}
@@ -42,11 +43,28 @@ def main() -> int:
             ids.append(cell_id)
         if cell.get("id") != cell_id:
             errors.append(f"cell {index}: top-level id must match metadata.id")
-        if cell.get("cell_type") == "code" and cell.get("execution_count") is not None:
-            errors.append(f"cell {index}: notebook must ship unexecuted")
+        if cell.get("cell_type") == "code":
+            code_cells.append((index, cell))
+            if cell.get("execution_count") is None:
+                errors.append(f"cell {index}: notebook must ship executed")
+            if not cell.get("outputs"):
+                errors.append(f"cell {index}: executed notebook output is required")
+            if any(
+                output.get("output_type") == "error"
+                for output in cell.get("outputs") or []
+            ):
+                errors.append(f"cell {index}: notebook contains an error output")
         text += "".join(cell.get("source") or []) + "\n"
     if len(ids) != len(set(ids)):
         errors.append("cell metadata.id values must be unique")
+    if len(code_cells) != 15:
+        errors.append(f"expected 15 code cells, found {len(code_cells)}")
+    execution_counts = [cell.get("execution_count") for _, cell in code_cells]
+    if execution_counts != list(range(1, len(code_cells) + 1)):
+        errors.append(
+            "code-cell execution counts must be continuous from 1: "
+            f"{execution_counts}"
+        )
     for marker in REQUIRED_MARKERS:
         if marker not in text:
             errors.append(f"missing section marker: {marker}")
