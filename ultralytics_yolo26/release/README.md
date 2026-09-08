@@ -4,6 +4,12 @@
 references are immutable OCI index digests; human-readable tags are recorded for
 discovery only.
 
+Release lock files are host-side deployment metadata. They are not copied into the
+pipeline image and do not participate in the workshop bundle SHA. The image carries
+its source commit, release ID, companion digest, bundle SHA, and model-set SHA in OCI
+labels and environment variables; the post-push lock then binds those identities to
+the final pipeline digest without creating a digest self-reference.
+
 The current entry is a bootstrap lock for the already published and GPU-verified
 2026-09-04 pipeline image plus its existing llama.cpp companion. The old pipeline
 image predates release-ID and companion-digest OCI labels, so the validator checks

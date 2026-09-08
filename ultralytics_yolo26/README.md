@@ -125,13 +125,9 @@ Default output image:
 zihao/ultralytics-yolo26-workshop:rocm7.2.1-full
 ```
 
-The current two-image release, including immutable OCI digest references, is recorded in [`release/current.env`](release/current.env). The human-readable pipeline tag is:
+The current two-image release, including its human-readable tags and immutable OCI digest references, is recorded in [`release/current.env`](release/current.env). This host-side lock is intentionally excluded from the image bundle: it is written only after the final pipeline digest exists, avoiding a self-referential image digest.
 
-```text
-crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04
-```
-
-A complete deployment uses two images: the pipeline/Jupyter image contains the code and all model files, while the digest-pinned companion image provides the `llama-server` binary. The launcher pulls and validates both images before creating runtime resources.
+A complete deployment uses two images: the pipeline/Jupyter image contains the application code and all model files, while the digest-pinned companion image provides the `llama-server` binary. The launcher reads the host checkout's release lock, then pulls and validates both images before creating runtime resources.
 
 The full image contains the complete workshop under `/workspace`, all four model files under `/opt/ultralytics-yolo26/models`, the validated `gfx1100` MIGraphX `.mxr`, saved notebooks/results, patched Ultralytics, ORT MIGraphX, and two build-time native artifacts: the pybind HIP/DRM PRIME/VA-API encoder and the standalone surface capability probe. OpenCV HIP and rocDecode are inherited from the pinned base image.
 

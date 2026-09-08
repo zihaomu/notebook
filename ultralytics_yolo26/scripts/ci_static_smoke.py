@@ -117,11 +117,18 @@ def check_release_and_docs() -> str:
     require("APPROVED_REGISTRY_IMAGE" in publish, "exact release-tag approval guard missing")
     dockerignore = (PACKAGE_ROOT / ".dockerignore").read_text()
     dockerfile = (PACKAGE_ROOT / "docker/Dockerfile").read_text()
-    for token in ("!doc/**", "!release/**"):
+    for token in ("!doc/**", "release/*", "!release/README.md"):
         require(token in dockerignore, f"Docker context is missing {token}")
+    require(
+        'COPY release /opt/ultralytics-yolo26/seed/release' not in dockerfile,
+        "Dockerfile must not bake mutable release locks",
+    )
+    bundle_source = (PACKAGE_ROOT / "scripts/workshop_bundle_identity.py").read_text()
+    require('    "release",' not in bundle_source, "bundle must exclude mutable release locks")
+    require('    "release/README.md",' in bundle_source, "bundle must include release policy")
     for token in (
         "COPY doc /opt/ultralytics-yolo26/seed/doc",
-        "COPY release /opt/ultralytics-yolo26/seed/release",
+        "COPY release/README.md /opt/ultralytics-yolo26/seed/release/README.md",
         "io.ultralytics.release.id",
         "io.ultralytics.companion.digest",
         "ULTRALYTICS_WORKSHOP_SOURCE_COMMIT=${WORKSHOP_GIT_COMMIT}",

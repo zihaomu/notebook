@@ -126,13 +126,9 @@ RELEASE_ID=ultralytics-yolo26-YYYY-MM-DD-rN \
 zihao/ultralytics-yolo26-workshop:rocm7.2.1-full
 ```
 
-当前双镜像 release 的固定标签与 immutable OCI digest 统一记录在 [`release/current.env`](release/current.env)。pipeline 的人类可读标签是：
+当前双镜像 release 的人类可读标签与 immutable OCI digest 统一记录在 [`release/current.env`](release/current.env)。该 lock 是宿主 Git checkout 的发布元数据，刻意不打入镜像 bundle：只有取得最终 pipeline digest 后才写入 lock，从而避免镜像 digest 自引用。
 
-```text
-crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04
-```
-
-完整部署由两个镜像组成：pipeline/Jupyter 镜像保存代码和全部模型文件，digest-pinned companion 镜像提供 `llama-server` 二进制。launcher 会在创建运行资源前拉取并校验两个镜像。
+完整部署由两个镜像组成：pipeline/Jupyter 镜像保存应用代码和全部模型文件，digest-pinned companion 镜像提供 `llama-server` 二进制。launcher 读取宿主 checkout 的 release lock，并在创建运行资源前拉取、校验两个镜像。
 
 full 专用镜像在 `/workspace` 内包含完整 workshop，并在 `/opt/ultralytics-yolo26/models` 内固定保存四个模型文件、正式 `gfx1100` MIGraphX `.mxr`、patched Ultralytics、ORT MIGraphX，以及两个 build-time native 工件：pybind HIP/DRM PRIME/VA-API encoder 和 standalone surface capability probe。OpenCV HIP 与 rocDecode 从固定 base image 继承。
 

@@ -547,6 +547,8 @@ Gate P4：branch/release 规则要求对应 smoke 状态成功，且 CI 日志�
 - 新增静态 smoke、隔离 GPU smoke 和 GitHub Actions workflow。
 - 本地隔离 GPU smoke 已通过：immutable 双镜像、真实 Qwen completion、YOLO parity、12 帧 direct VA-API 和 393 帧 manifest 均通过。
 
+- 两阶段发布边界已修正：`current.env` 和历史 lock 仅作为宿主 Git 发布登记，不复制进镜像、也不参与 bundle SHA；镜像只保留稳定的 `release/README.md` 规则以及 source/release/companion OCI 身份，消除 pipeline digest 自引用。
+
 待发布步骤：
 
 1. 提交当前源码形成 clean build commit。

@@ -15,6 +15,7 @@ ROOT_FILES = (
     "ultralytics_yolo26x_step_by_step.ipynb",
     "ultralytics_yolo26x_end_to_end.ipynb",
     "output/.gitkeep",
+    "release/README.md",
 )
 ROOT_DIRECTORIES = (
     "assets",
@@ -24,7 +25,6 @@ ROOT_DIRECTORIES = (
     "doc",
     "output/benchmarks",
     "output/pipeline",
-    "release",
     "scripts",
     "src",
     "tests",

@@ -33,7 +33,8 @@ output/*
 !output/pipeline/
 !output/pipeline/**
 !release/
-!release/**
+release/*
+!release/README.md
 !scripts/
 !scripts/**
 !src/

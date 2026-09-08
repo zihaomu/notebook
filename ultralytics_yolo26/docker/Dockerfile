@@ -82,7 +82,7 @@ COPY doc /opt/ultralytics-yolo26/seed/doc
 COPY docker /opt/ultralytics-yolo26/seed/docker
 COPY native /opt/ultralytics-yolo26/seed/native
 COPY output /opt/ultralytics-yolo26/seed/output
-COPY release /opt/ultralytics-yolo26/seed/release
+COPY release/README.md /opt/ultralytics-yolo26/seed/release/README.md
 COPY scripts /opt/ultralytics-yolo26/seed/scripts
 COPY src /opt/ultralytics-yolo26/seed/src
 COPY tests /opt/ultralytics-yolo26/seed/tests
