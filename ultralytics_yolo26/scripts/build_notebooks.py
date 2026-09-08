@@ -106,9 +106,14 @@ from scripts.model_setup import ensure_models, model_status
 from scripts.notebook_helpers import frame_at, show_bgr, show_bgr_grid, video_info
 from scripts.validate_runtime import validate
 
+delivery_mode = (
+    "baked/offline verification"
+    if os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE") == "baked"
+    else "development fallback download"
+)
 models = ensure_models(env.MODELS, progress=True)
 runtime = validate(require_models=True, require_vlm=False)
-print(json.dumps(runtime, indent=2))
+print(json.dumps({"model_delivery": delivery_mode, **runtime}, indent=2))
 models
 '''
 
@@ -132,7 +137,7 @@ rocDecode -> OpenCV HIP preprocess -> GPU I/O Binding -> compact detections
 
 The workshop uses `YOLO.predict()` as the correctness baseline. In the continuous loop, Ultralytics still owns ONNX inference, OpenCV owns preprocessing and GPU NMS, and a small native bridge owns GPU overlay plus direct VA-API surface submission.
 '''),
-    markdown("step-setup-md", "## 1. Prepare the official YOLO26x assets and validate Radeon"),
+    markdown("step-setup-md", "## 1. Verify the baked model set and validate Radeon"),
     code("step-setup", setup_code),
     markdown("step-predict-md", r'''
 ## 2. Begin with the familiar `YOLO.predict()` API
@@ -352,7 +357,7 @@ video -> rocDecode -> OpenCV HIP -> Ultralytics ONNX/MIGraphX -> GPU NMS
 
 The schema 3 manifest prevents outputs from another ONNX, GPU, ROCm/MIGraphX, ORT, Ultralytics commit, workshop patch, production vision source, or native bridge source from being silently reused.
 '''),
-    markdown("e2e-setup-md", "## 1. Prepare models and validate the runtime"),
+    markdown("e2e-setup-md", "## 1. Verify the baked model set and runtime"),
     code("e2e-setup", setup_code),
     markdown("e2e-provider-md", "## 2. Initialize the Ultralytics-owned MIGraphX backend"),
     code("e2e-provider", r'''

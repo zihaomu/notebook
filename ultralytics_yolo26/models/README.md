@@ -1,6 +1,6 @@
 # Workshop Model Assets
 
-The full image stores one immutable copy of all four model files and the validated `gfx1100` MIGraphX cache under `/opt/ultralytics-yolo26/models`. The pipeline reads this directory directly. Since llama.cpp runs in a separate image, the launcher checksum-copies the same model set once to the named volume `ultralytics_yolo26_models` and mounts it read-only at `/models`. The first notebook cell still calls `scripts/model_setup.py`, but a valid full image performs verification without downloading anything.
+The full image stores one immutable copy of all four model files and the validated `gfx1100` MIGraphX cache under `/opt/ultralytics-yolo26/models`. The pipeline reads this directory directly. Since llama.cpp runs in a separate image, the launcher checksum-copies the same model set once to the named volume `ultralytics_yolo26_models` and mounts it read-only at `/models`. The first Notebook cell calls `scripts/model_setup.py`, but `ULTRALYTICS_WORKSHOP_BUNDLE=baked` forces strict offline verification: a missing or corrupt file is an error and cannot trigger a download.
 
 ## Official Ultralytics YOLO26x Assets
 
@@ -45,9 +45,12 @@ Default endpoint: `https://hf-mirror.com`
 | `Qwen3-VL-8B-Instruct-Q8_0.gguf` | 8,709,520,224 | `cb8616bf6ed228982d9e47d7b72b42195342efa26044b0ee1873e61d9e78d3d7` |
 | `mmproj-F16.gguf` | 1,159,030,336 | `d406d03ebabefdef86a2c86bf0c1b65f9e046f7a81c218f25de4931b46a07fc4` |
 
-## Command-Line Preparation
+## Development Fallback Download
+
+This path is for a source checkout or a non-full development image only. It is not used by the published full release.
 
 ```bash
+unset ULTRALYTICS_WORKSHOP_BUNDLE
 export HF_ENDPOINT=https://hf-mirror.com
 python3 scripts/model_setup.py
 ```

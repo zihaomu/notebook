@@ -46,7 +46,37 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
+def validate_baked_mode_is_offline() -> None:
+    original_bundle = model_setup.os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE")
+    original_get = model_setup.requests.get
+    network_calls = 0
+
+    def reject_network(*args: object, **kwargs: object) -> None:
+        nonlocal network_calls
+        network_calls += 1
+        raise AssertionError("baked model validation attempted a network request")
+
+    model_setup.os.environ["ULTRALYTICS_WORKSHOP_BUNDLE"] = "baked"
+    model_setup.requests.get = reject_network
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            try:
+                model_setup.ensure_models(Path(directory), progress=False)
+            except RuntimeError as error:
+                assert "network download is disabled" in str(error)
+            else:
+                raise AssertionError("missing baked models should fail validation")
+    finally:
+        model_setup.requests.get = original_get
+        if original_bundle is None:
+            model_setup.os.environ.pop("ULTRALYTICS_WORKSHOP_BUNDLE", None)
+        else:
+            model_setup.os.environ["ULTRALYTICS_WORKSHOP_BUNDLE"] = original_bundle
+    assert network_calls == 0
+
+
 def main() -> None:
+    validate_baked_mode_is_offline()
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -75,6 +105,7 @@ def main() -> None:
         server.server_close()
     print({"requests": len(REQUEST_RANGES), "ranges": REQUEST_RANGES})
     print("MODEL_DOWNLOAD_AUTO_RESUME=PASS")
+    print("BAKED_MODEL_OFFLINE_GUARD=PASS")
 
 
 if __name__ == "__main__":

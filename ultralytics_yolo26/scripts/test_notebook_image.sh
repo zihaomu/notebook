@@ -2,7 +2,12 @@
 set -euo pipefail
 
 package_root="${PACKAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-image="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1-full}"
+release_lock="${RELEASE_LOCK:-$package_root/release/current.env}"
+pipeline_override="${PIPELINE_IMAGE:-}"
+python3 "$package_root/scripts/validate_release_lock.py" --lock "$release_lock" >/dev/null
+# shellcheck disable=SC1090
+source "$release_lock"
+image="${pipeline_override:-$PIPELINE_IMAGE_REF}"
 gpu="${PIPELINE_GPU:-0}"
 vaapi_device="${VAAPI_DEVICE:-/dev/dri/renderD128}"
 
@@ -11,11 +16,10 @@ vaapi_device="${VAAPI_DEVICE:-/dev/dri/renderD128}"
     exit 1
 }
 
-docker image inspect "$image" >/dev/null 2>&1 || {
-    echo "Image is unavailable: $image" >&2
-    echo "Build it with: bash scripts/build_notebook_image.sh" >&2
-    exit 1
-}
+if ! docker image inspect "$image" >/dev/null 2>&1; then
+    echo "Pulling pipeline image for validation: $image"
+    docker pull "$image"
+fi
 
 workdir=$(docker image inspect -f '{{.Config.WorkingDir}}' "$image")
 [[ "$workdir" == "/workspace" ]] || {

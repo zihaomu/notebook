@@ -8,10 +8,7 @@
 !data/
 !data/sidewalk.mp4
 !doc/
-doc/*
-!doc/performance_diagnosis_CN.md
-!doc/speedup_blog/
-!doc/speedup_blog/**
+!doc/**
 !docker/
 !docker/**
 !models/
@@ -35,6 +32,8 @@ output/*
 !output/benchmarks/**
 !output/pipeline/
 !output/pipeline/**
+!release/
+!release/**
 !scripts/
 !scripts/**
 !src/

@@ -67,7 +67,7 @@ onnxruntime-migraphx==1.24.2
 
 ## 模型与 Cache
 
-第一个 notebook 单元会下载并严格校验：
+在 full release 中，第一个 Notebook 单元会离线校验镜像内置的以下资产：
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
@@ -76,7 +76,7 @@ onnxruntime-migraphx==1.24.2
 | `Qwen3-VL-8B-Instruct-Q8_0.gguf` | 8,709,520,224 | `cb8616bf6ed228982d9e47d7b72b42195342efa26044b0ee1873e61d9e78d3d7` |
 | `mmproj-F16.gguf` | 1,159,030,336 | `d406d03ebabefdef86a2c86bf0c1b65f9e046f7a81c218f25de4931b46a07fc4` |
 
-下载器支持 `.part`、自动有界重试、HTTP Range 续传、固定大小/SHA 校验和原子替换。URL 和覆盖变量见 [`models/README.md`](models/README.md)。
+仅在源码开发或非 full 镜像模式下，缺失文件才会进入下载 fallback；下载器支持 `.part`、自动有界重试、HTTP Range 续传、固定大小/SHA 校验和原子替换。baked 模式发现文件缺失或损坏时会直接失败，绝不转为联网下载。URL 和覆盖变量见 [`models/README.md`](models/README.md)。
 
 ORT 生成的 `.mxr` 位于 `models/ort-migraphx-cache/<identity>/`。identity 绑定 ONNX SHA、GPU、ROCm/PyTorch HIP、MIGraphX、ORT、Ultralytics commit 和 workshop patch SHA，不能假设可跨环境复用。
 
@@ -113,10 +113,11 @@ crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/
 muzihao2/work:opencv_end2end_2026_08_12
 ```
 
-执行：
+必须从 tracked-clean 工作树构建，并显式提供 release ID：
 
 ```bash
-bash scripts/build_notebook_image.sh
+RELEASE_ID=ultralytics-yolo26-YYYY-MM-DD-rN \
+  bash scripts/build_notebook_image.sh
 ```
 
 生成：
@@ -125,11 +126,13 @@ bash scripts/build_notebook_image.sh
 zihao/ultralytics-yolo26-workshop:rocm7.2.1-full
 ```
 
-发布到 ACR 的固定标签：
+当前双镜像 release 的固定标签与 immutable OCI digest 统一记录在 [`release/current.env`](release/current.env)。pipeline 的人类可读标签是：
 
 ```text
 crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04
 ```
+
+完整部署由两个镜像组成：pipeline/Jupyter 镜像保存代码和全部模型文件，digest-pinned companion 镜像提供 `llama-server` 二进制。launcher 会在创建运行资源前拉取并校验两个镜像。
 
 full 专用镜像在 `/workspace` 内包含完整 workshop，并在 `/opt/ultralytics-yolo26/models` 内固定保存四个模型文件、正式 `gfx1100` MIGraphX `.mxr`、patched Ultralytics、ORT MIGraphX，以及两个 build-time native 工件：pybind HIP/DRM PRIME/VA-API encoder 和 standalone surface capability probe。OpenCV HIP 与 rocDecode 从固定 base image 继承。
 
@@ -139,7 +142,7 @@ OCI label 记录源码 commit、base image、Ultralytics patch、bridge source�
 
 ## 启动
 
-根据宿主机分配选择物理 GPU 和对应 VA-API render node：
+先登录 `release/current.env` 引用的 registry，再根据宿主机分配选择物理 GPU 和对应 VA-API render node。launcher 会自动拉取两个 immutable image ref；显式镜像覆盖会标记为开发模式。
 
 ```bash
 PIPELINE_GPU=0 \
@@ -161,6 +164,12 @@ bash scripts/stop_notebook_container.sh
 ```
 
 ## 验证
+
+启动或测试容器前先校验双镜像 release lock：
+
+```bash
+python3 scripts/validate_release_lock.py --check-local-images
+```
 
 ```bash
 bash scripts/test_notebook_image.sh

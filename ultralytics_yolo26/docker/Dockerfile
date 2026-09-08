@@ -15,6 +15,8 @@ ARG QWEN_GGUF_SHA256=unknown
 ARG QWEN_MMPROJ_SHA256=unknown
 ARG MODEL_SET_SHA256=unknown
 ARG WORKSHOP_GIT_COMMIT=unknown
+ARG WORKSHOP_RELEASE_ID=unreleased
+ARG COMPANION_IMAGE_REF=unknown
 
 LABEL org.opencontainers.image.title="Ultralytics YOLO26x AMD Radeon baked workshop" \
       org.opencontainers.image.description="Self-contained Ultralytics workshop with baked YOLO26x, gfx1100 MIGraphX cache, HIP/VAAPI binaries, and Jupyter" \
@@ -36,7 +38,9 @@ LABEL org.opencontainers.image.title="Ultralytics YOLO26x AMD Radeon baked works
       io.ultralytics.model-set.sha256="${MODEL_SET_SHA256}" \
       io.ultralytics.qwen-models="baked" \
       io.ultralytics.models.path="/opt/ultralytics-yolo26/models" \
-      io.ultralytics.workshop.workspace="/workspace"
+      io.ultralytics.workshop.workspace="/workspace" \
+    io.ultralytics.release.id="${WORKSHOP_RELEASE_ID}" \
+    io.ultralytics.companion.digest="${COMPANION_IMAGE_REF}"
 
 COPY --from=ultralytics_source . /tmp/ultralytics
 COPY --from=ort_wheel . /tmp/ort-wheel
@@ -78,6 +82,7 @@ COPY doc /opt/ultralytics-yolo26/seed/doc
 COPY docker /opt/ultralytics-yolo26/seed/docker
 COPY native /opt/ultralytics-yolo26/seed/native
 COPY output /opt/ultralytics-yolo26/seed/output
+COPY release /opt/ultralytics-yolo26/seed/release
 COPY scripts /opt/ultralytics-yolo26/seed/scripts
 COPY src /opt/ultralytics-yolo26/seed/src
 COPY tests /opt/ultralytics-yolo26/seed/tests

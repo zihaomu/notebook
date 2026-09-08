@@ -1,0 +1,109 @@
+name: Ultralytics YOLO26 Smoke
+
+on:
+  pull_request:
+    paths:
+      - "ultralytics_yolo26/**"
+      - ".github/workflows/ultralytics-yolo26-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ultralytics_yolo26/**"
+      - ".github/workflows/ultralytics-yolo26-smoke.yml"
+  workflow_dispatch:
+    inputs:
+      run_gpu:
+        description: "Run the W7900 release gate"
+        required: true
+        default: false
+        type: boolean
+      gpu_index:
+        description: "Physical ROCm GPU index"
+        required: false
+        default: "0"
+        type: string
+      vaapi_device:
+        description: "Matching VA-API render node"
+        required: false
+        default: "/dev/dri/renderD128"
+        type: string
+      pipeline_image:
+        description: "Optional candidate pipeline image, preferably repository@sha256"
+        required: false
+        default: ""
+        type: string
+      llama_image:
+        description: "Optional candidate llama.cpp image, preferably repository@sha256"
+        required: false
+        default: ""
+        type: string
+      release_id:
+        description: "Release ID declared by a candidate pipeline image"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Static release contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate package and release lock
+        working-directory: ultralytics_yolo26
+        run: python3 scripts/ci_static_smoke.py
+
+  gpu:
+    name: W7900 release smoke
+    if: github.event_name == 'workflow_dispatch' && inputs.run_gpu
+    needs: static
+    runs-on: [self-hosted, Linux, X64, rocm, w7900]
+    timeout-minutes: 30
+    concurrency:
+      group: ultralytics-yolo26-w7900-release
+      cancel-in-progress: false
+    env:
+      CI_GPU: ${{ inputs.gpu_index }}
+      CI_VAAPI_DEVICE: ${{ inputs.vaapi_device }}
+      PIPELINE_IMAGE: ${{ inputs.pipeline_image }}
+      LLAMA_IMAGE: ${{ inputs.llama_image }}
+      WORKSHOP_RELEASE_ID: ${{ inputs.release_id }}
+      ACR_SHANGHAI_USERNAME: ${{ secrets.ACR_SHANGHAI_USERNAME }}
+      ACR_SHANGHAI_PASSWORD: ${{ secrets.ACR_SHANGHAI_PASSWORD }}
+      ACR_SHENZHEN_USERNAME: ${{ secrets.ACR_SHENZHEN_USERNAME }}
+      ACR_SHENZHEN_PASSWORD: ${{ secrets.ACR_SHENZHEN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate registries
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$ACR_SHANGHAI_USERNAME" && -n "$ACR_SHANGHAI_PASSWORD" ]]
+          [[ -n "$ACR_SHENZHEN_USERNAME" && -n "$ACR_SHENZHEN_PASSWORD" ]]
+          printf '%s' "$ACR_SHANGHAI_PASSWORD" | docker login \
+            --username "$ACR_SHANGHAI_USERNAME" --password-stdin \
+            crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com
+          printf '%s' "$ACR_SHENZHEN_PASSWORD" | docker login \
+            --username "$ACR_SHENZHEN_USERNAME" --password-stdin \
+            crpi-ygzb1jbfyj9pjrm6.cn-shenzhen.personal.cr.aliyuncs.com
+      - name: Run isolated GPU smoke
+        working-directory: ultralytics_yolo26
+        run: bash scripts/ci_gpu_smoke.sh
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ultralytics-yolo26-gpu-smoke-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ultralytics_yolo26_*/ci-logs
+            ${{ runner.temp }}/ultralytics_yolo26_*/ci-gpu-overlay-smoke.mp4
+          if-no-files-found: warn

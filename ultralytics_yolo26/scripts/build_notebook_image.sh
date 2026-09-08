@@ -2,6 +2,11 @@
 set -euo pipefail
 
 package_root="${PACKAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+release_lock="${RELEASE_LOCK:-$package_root/release/current.env}"
+[[ -f "$release_lock" ]] || { echo "Missing release lock: $release_lock" >&2; exit 1; }
+python3 "$package_root/scripts/validate_release_lock.py" --lock "$release_lock" >/dev/null
+# shellcheck disable=SC1090
+source "$release_lock"
 image="${PIPELINE_IMAGE:-zihao/ultralytics-yolo26-workshop:rocm7.2.1-full}"
 base_image="${BASE_IMAGE:-crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:opencv_end2end_2026_08_12}"
 ultralytics_repository="${ULTRALYTICS_REPOSITORY:-https://gh-test.anruicloud.com/zihaomu/ultralytics.git}"
@@ -13,6 +18,26 @@ wheel_dir="${ORT_WHEEL_DIR:-$package_root/.build/wheels}"
 patch_path="$package_root/docker/patches/ultralytics-migraphx-iobinding.patch"
 cache_dir="$package_root/models/ort-migraphx-cache/735f1583e99dfeb733da"
 cache_file="$cache_dir/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr"
+repository_root=$(git -C "$package_root" rev-parse --show-toplevel)
+package_relative=$(realpath --relative-to="$repository_root" "$package_root")
+dirty=$(git -C "$repository_root" status --porcelain --untracked-files=all -- \
+    "$package_relative" .github/workflows/ultralytics-yolo26-smoke.yml)
+[[ -z "$dirty" ]] || {
+    echo "Refusing to build from a dirty workshop tree:" >&2
+    echo "$dirty" >&2
+    exit 1
+}
+
+release_id="${RELEASE_ID:-}"
+[[ -n "$release_id" ]] || {
+    echo "RELEASE_ID is required for a provenance-bearing build" >&2
+    exit 1
+}
+companion_image_ref="${COMPANION_IMAGE_REF:-$LLAMA_IMAGE_REF}"
+[[ "$companion_image_ref" == *@sha256:* ]] || {
+    echo "COMPANION_IMAGE_REF must be digest-pinned: $companion_image_ref" >&2
+    exit 1
+}
 
 for path in \
     "$package_root/docker/Dockerfile" \
@@ -121,9 +146,25 @@ docker buildx build \
     --build-arg "MODEL_SET_SHA256=$model_set_sha256" \
     --build-arg "MIGRAPHX_CACHE_SHA256=$cache_sha256" \
     --build-arg "WORKSHOP_GIT_COMMIT=$workshop_git_commit" \
+    --build-arg "WORKSHOP_RELEASE_ID=$release_id" \
+    --build-arg "COMPANION_IMAGE_REF=$companion_image_ref" \
     --build-context "ultralytics_source=$ultralytics_source" \
     --build-context "ort_wheel=$wheel_dir" \
     "$package_root"
+
+built_revision=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+built_release=$(docker image inspect -f '{{index .Config.Labels "io.ultralytics.release.id"}}' "$image")
+built_companion=$(docker image inspect -f '{{index .Config.Labels "io.ultralytics.companion.digest"}}' "$image")
+built_bundle=$(docker image inspect -f '{{index .Config.Labels "io.ultralytics.workshop.bundle.sha256"}}' "$image")
+built_model_set=$(docker image inspect -f '{{index .Config.Labels "io.ultralytics.model-set.sha256"}}' "$image")
+computed_bundle=$(docker run --rm --entrypoint /opt/venv/bin/python3 "$image" \
+    /opt/ultralytics-yolo26/seed/scripts/workshop_bundle_identity.py \
+    /opt/ultralytics-yolo26/seed)
+[[ "$built_revision" == "$workshop_git_commit" ]]
+[[ "$built_release" == "$release_id" ]]
+[[ "$built_companion" == "$companion_image_ref" ]]
+[[ "$built_bundle" == "$bundle_sha256" && "$computed_bundle" == "$bundle_sha256" ]]
+[[ "$built_model_set" == "$model_set_sha256" ]]
 
 docker image inspect "$image" --format \
     'Built {{index .RepoTags 0}} ({{.Id}}), workdir={{json .Config.WorkingDir}}'

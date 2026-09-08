@@ -66,7 +66,7 @@ This fork is a pinned workshop backend, not a claim that the changes are already
 
 ## Models and Cache
 
-The first notebook cell prepares and strictly validates:
+In the full release, the first notebook cell verifies these baked assets without network access:
 
 | Asset | Bytes | SHA-256 |
 |---|---:|---|
@@ -75,7 +75,7 @@ The first notebook cell prepares and strictly validates:
 | `Qwen3-VL-8B-Instruct-Q8_0.gguf` | 8,709,520,224 | `cb8616bf6ed228982d9e47d7b72b42195342efa26044b0ee1873e61d9e78d3d7` |
 | `mmproj-F16.gguf` | 1,159,030,336 | `d406d03ebabefdef86a2c86bf0c1b65f9e046f7a81c218f25de4931b46a07fc4` |
 
-Downloads use `.part` files, automatic bounded retries, HTTP Range resume, fixed size/SHA validation, and atomic replacement. See [`models/README.md`](models/README.md) for URLs and overrides.
+If the package is run from a development checkout rather than the full image, the same helper can download missing assets using `.part` files, bounded retries, HTTP Range resume, fixed size/SHA validation, and atomic replacement. In a baked image, a missing or corrupt asset is a hard error and never falls back to the network. See [`models/README.md`](models/README.md).
 
 ORT-generated `.mxr` files live under `models/ort-migraphx-cache/<identity>/`. The identity includes the ONNX SHA, GPU architecture/name, ROCm/PyTorch HIP, MIGraphX, ONNX Runtime, Ultralytics commit, and workshop patch SHA. A cache is not assumed portable across these identities.
 
@@ -112,10 +112,11 @@ crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/
 muzihao2/work:opencv_end2end_2026_08_12
 ```
 
-Build the dedicated baked image:
+Build the dedicated baked image from a clean tracked worktree and provide an explicit release ID:
 
 ```bash
-bash scripts/build_notebook_image.sh
+RELEASE_ID=ultralytics-yolo26-YYYY-MM-DD-rN \
+  bash scripts/build_notebook_image.sh
 ```
 
 Default output image:
@@ -124,11 +125,13 @@ Default output image:
 zihao/ultralytics-yolo26-workshop:rocm7.2.1-full
 ```
 
-Published registry tag:
+The current two-image release, including immutable OCI digest references, is recorded in [`release/current.env`](release/current.env). The human-readable pipeline tag is:
 
 ```text
 crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-full_2026_09_04
 ```
+
+A complete deployment uses two images: the pipeline/Jupyter image contains the code and all model files, while the digest-pinned companion image provides the `llama-server` binary. The launcher pulls and validates both images before creating runtime resources.
 
 The full image contains the complete workshop under `/workspace`, all four model files under `/opt/ultralytics-yolo26/models`, the validated `gfx1100` MIGraphX `.mxr`, saved notebooks/results, patched Ultralytics, ORT MIGraphX, and two build-time native artifacts: the pybind HIP/DRM PRIME/VA-API encoder and the standalone surface capability probe. OpenCV HIP and rocDecode are inherited from the pinned base image.
 
@@ -138,7 +141,7 @@ OCI labels record the source commit, base image, Ultralytics patch, bridge sourc
 
 ## Start Locally
 
-Choose the physical GPU and matching VA-API render node for the host:
+Log in to the registries referenced by `release/current.env`, then choose the physical GPU and matching VA-API render node. The launcher pulls both immutable image references automatically; environment overrides are treated as development mode.
 
 ```bash
 PIPELINE_GPU=0 \
@@ -160,6 +163,12 @@ bash scripts/stop_notebook_container.sh
 ```
 
 ## Validation
+
+Validate the release lock before starting or testing containers:
+
+```bash
+python3 scripts/validate_release_lock.py --check-local-images
+```
 
 ```bash
 # Image, provider, rocDecode, GPU I/O Binding, and one-frame direct encode

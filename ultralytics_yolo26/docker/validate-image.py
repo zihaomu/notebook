@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,19 @@ def main() -> None:
         raise RuntimeError(f"Expected baked model root, got {model_root}")
     if os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE") != "baked":
         raise RuntimeError("Image does not declare a baked workshop bundle")
+    release_id = os.environ.get("ULTRALYTICS_WORKSHOP_RELEASE_ID", "")
+    source_commit = os.environ.get("ULTRALYTICS_WORKSHOP_SOURCE_COMMIT", "")
+    companion_image = os.environ.get("ULTRALYTICS_COMPANION_IMAGE_REF", "")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", release_id):
+        raise RuntimeError(f"Invalid workshop release ID: {release_id!r}")
+    if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        raise RuntimeError(f"Invalid workshop source commit: {source_commit!r}")
+    if not re.fullmatch(
+        r"[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}", companion_image
+    ):
+        raise RuntimeError(
+            f"Companion image is not digest-pinned: {companion_image!r}"
+        )
 
     required_paths = [
         workspace / "scripts/notebook_env.py",
@@ -272,6 +286,11 @@ def main() -> None:
     backend = validate_backend(model_root / "yolo26x.onnx", iterations=3)
 
     result = {
+        "release": {
+            "id": release_id,
+            "source_commit": source_commit,
+            "companion_image": companion_image,
+        },
         "workspace": str(workspace),
         "ultralytics": ultralytics.__version__,
         "onnxruntime": ort.__version__,

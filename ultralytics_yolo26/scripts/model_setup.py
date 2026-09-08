@@ -437,18 +437,35 @@ def ensure_models(
     model_dir: Path | None = None,
     endpoint: str | None = None,
     progress: bool = True,
+    allow_download: bool | None = None,
 ) -> list[dict[str, object]]:
-    """Download and validate official YOLO checkpoint/ONNX and Qwen files."""
+    """Validate baked models, or download missing assets in development mode."""
     directory = Path(model_dir or env.MODELS).resolve()
+    baked_bundle = os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE") == "baked"
+    if allow_download is None:
+        allow_download = not baked_bundle
+    if baked_bundle and allow_download:
+        raise ValueError("Downloads cannot be enabled in a baked workshop image")
+
+    statuses = [
+        (spec, *_basic_status(directory / spec.filename, spec))
+        for spec in DOWNLOAD_MODELS
+    ]
+    invalid = [(spec.filename, detail) for spec, ready, detail in statuses if not ready]
+    if invalid and not allow_download:
+        details = ", ".join(f"{filename}: {detail}" for filename, detail in invalid)
+        raise RuntimeError(
+            "Baked model validation failed; network download is disabled: " + details
+        )
+
     directory.mkdir(parents=True, exist_ok=True)
     mirror = endpoint or os.environ.get("HF_ENDPOINT", DEFAULT_HF_ENDPOINT)
-
     missing_bytes = sum(
         max(0, spec.size - (directory / f"{spec.filename}.part").stat().st_size)
         if (directory / f"{spec.filename}.part").exists()
         else spec.size
-        for spec in DOWNLOAD_MODELS
-        if spec.size is not None and not _basic_status(directory / spec.filename, spec)[0]
+        for spec, ready, _ in statuses
+        if spec.size is not None and not ready
     )
     free_bytes = shutil.disk_usage(directory).free
     if missing_bytes and free_bytes < missing_bytes + 1024 * 1024**2:
@@ -458,10 +475,11 @@ def ensure_models(
             f"have {free_bytes / 1024**3:.2f} GiB"
         )
 
-    for spec in (YOLO_CHECKPOINT, YOLO_ONNX):
+    ready_message = "verified baked model" if baked_bundle else "ready"
+    for spec in DOWNLOAD_MODELS:
         ready, detail = _basic_status(directory / spec.filename, spec)
         if ready:
-            print(f"[models] {spec.filename}: ready")
+            print(f"[models] {spec.filename}: {ready_message}")
             continue
         url = _download_url(spec, mirror)
         print(f"[models] {spec.filename}: {detail}; downloading from {url}")
@@ -470,19 +488,12 @@ def ensure_models(
 
     cache_dir = directory / "ort-migraphx-cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    print(
-        f"[models] MIGraphX cache: {cache_dir} "
-        "(created by the Ultralytics ONNX backend on first GPU inference)"
+    cache_description = (
+        "verified baked gfx1100 cache"
+        if baked_bundle
+        else "created by the Ultralytics ONNX backend on first GPU inference"
     )
-
-    for spec in QWEN_MODELS:
-        ready, detail = _basic_status(directory / spec.filename, spec)
-        if ready:
-            print(f"[models] {spec.filename}: ready")
-            continue
-        print(f"[models] {spec.filename}: {detail}; downloading from {mirror}")
-        download_model(spec, directory, endpoint=mirror, progress=progress)
-        print(f"[models] {spec.filename}: download complete")
+    print(f"[models] MIGraphX cache: {cache_dir} ({cache_description})")
     return model_status(directory)
 
 
@@ -491,7 +502,7 @@ def wait_for_llamacpp(
     timeout: int = 300,
     progress: bool = True,
 ) -> dict[str, object]:
-    """Wait for a llama.cpp service that may start after GGUF download completes."""
+    """Wait for the companion llama.cpp service to load the baked GGUF files."""
     base = (root_url or env.LLAMACPP_ROOT_URL).rstrip("/")
     started = time.monotonic()
     with progress_bar(
