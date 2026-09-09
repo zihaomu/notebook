@@ -30,10 +30,18 @@ def summarize(values: list[float]) -> dict[str, float]:
     }
 
 
-def benchmark(video: Path, frames: int, warmup: int) -> dict[str, object]:
+def benchmark(
+    video: Path,
+    frames: int,
+    warmup: int,
+    model_path: Path | None = None,
+) -> dict[str, object]:
     reader = RocDecodeReader(str(video), device_id=0)
     processor = GPUPreprocessor((640, 640), device="cuda:0")
-    detector = UltralyticsYOLODetector(device_id=0)
+    detector = UltralyticsYOLODetector(
+        model_path=str(model_path) if model_path is not None else None,
+        device_id=0,
+    )
     pointers = {
         **processor.pointer_info(),
         "output_pointer": detector.provider_info()["output_pointer"],
@@ -98,9 +106,10 @@ def main() -> None:
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--frames", type=int, default=120)
     parser.add_argument("--warmup", type=int, default=10)
+    parser.add_argument("--model", type=Path)
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
-    result = benchmark(args.video, args.frames, args.warmup)
+    result = benchmark(args.video, args.frames, args.warmup, args.model)
     payload = json.dumps(result, indent=2)
     print(payload)
     if args.json_out:

@@ -1,0 +1,8 @@
+{
+  "trigger": "Create a candidate when a stable track enters a configured interaction zone.",
+  "evidence": "Send before/trigger/after full-scene frames, subject ROI, and track metadata.",
+  "output": "Return one allowlisted event label, visible facts, and uncertainty as JSON.",
+  "backpressure": "Keep one active request and one latest candidate; replace stale pending work.",
+  "failure": "Keep deterministic YOLO/track facts and mark semantic context unavailable.",
+  "metrics": "Measure event recall, duplicate suppression, queue delay, VLM latency, and YOLO active-window P95."
+}

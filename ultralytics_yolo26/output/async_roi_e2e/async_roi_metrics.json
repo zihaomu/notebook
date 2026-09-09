@@ -1,0 +1,78 @@
+{
+  "frames": 393,
+  "frame_loop_seconds": 10.511023,
+  "frame_loop_fps": 37.389,
+  "video_pipeline_seconds": 10.608805,
+  "fps": 37.045,
+  "vlm_drain_seconds": 4.1336,
+  "total_wall_with_vlm_drain_seconds": 14.742408,
+  "video_decode": "rocdecode",
+  "video_encode": "vaapi",
+  "preprocess_mean_ms": 0.505,
+  "detection_mean_ms": 23.676,
+  "frame_d2h_mean_ms": 1.663,
+  "overlay_mean_ms": 1.36,
+  "encode_feed_mean_ms": 0.029,
+  "trigger_opportunities": 14,
+  "trigger_with_detections": 14,
+  "vlm_interval_frames": 30,
+  "vlm_top_k": 3,
+  "vlm_drained": true,
+  "vlm": {
+    "submitted_batches": 3,
+    "skipped_busy": 11,
+    "submitted_rois": 9,
+    "completed_batches": 3,
+    "completed_rois": 9,
+    "failed_rois": 0,
+    "batch_latency_p50_ms": 4819.708,
+    "batch_latency_p95_ms": 5039.556,
+    "last_latency_ms": 4274.78,
+    "active": false,
+    "latest_descriptions": [
+      {
+        "detection": [
+          1.875,
+          2.25,
+          653.25,
+          621.75,
+          0.9462890625,
+          7.0
+        ],
+        "description": "A large white delivery truck with green branding is partially visible, parked or moving in an urban setting with blurred background elements."
+      },
+      {
+        "detection": [
+          1723.5,
+          492.75,
+          1918.5,
+          873.0,
+          0.93359375,
+          10.0
+        ],
+        "description": "A blurry black fire hydrant with a white top stands on a paved street."
+      },
+      {
+        "detection": [
+          720.75,
+          382.5,
+          814.5,
+          564.0,
+          0.9013671875,
+          0.0
+        ],
+        "description": "A blurred figure in dark clothing appears to be walking or running across a light-colored surface."
+      }
+    ]
+  },
+  "detection_vlm_idle": {
+    "count": 33,
+    "p50_ms": 10.813,
+    "p95_ms": 19.954
+  },
+  "detection_vlm_active": {
+    "count": 360,
+    "p50_ms": 24.999,
+    "p95_ms": 39.695
+  }
+}

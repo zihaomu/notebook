@@ -49,7 +49,7 @@ def check_notebooks() -> dict[str, int]:
         "NOTEBOOKS"
     ]
     paths = sorted(PACKAGE_ROOT.glob("*.ipynb"))
-    require(len(paths) == 2, f"expected two notebooks, found {len(paths)}")
+    require(len(paths) == 3, f"expected three notebooks, found {len(paths)}")
     require(set(generated) == {path.name for path in paths}, "generator output set differs")
     for path in paths:
         notebook = json.loads(path.read_text(encoding="utf-8"))

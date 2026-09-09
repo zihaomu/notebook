@@ -30,6 +30,10 @@ output/*
 !output/.gitkeep
 !output/benchmarks/
 !output/benchmarks/**
+!output/hands_on/
+!output/hands_on/**
+!output/async_roi_e2e/
+!output/async_roi_e2e/**
 !output/pipeline/
 !output/pipeline/**
 !release/
@@ -42,6 +46,7 @@ release/*
 !tests/
 !tests/**
 !ultralytics_yolo26x_step_by_step.ipynb
+!ultralytics_yolo26x_hands_on.ipynb
 !ultralytics_yolo26x_end_to_end.ipynb
 
 **/__pycache__/

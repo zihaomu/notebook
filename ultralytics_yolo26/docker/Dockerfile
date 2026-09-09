@@ -74,6 +74,7 @@ RUN set -eux; \
 
 COPY .dockerignore .gitignore README.md README_CN.md \
     ultralytics_yolo26x_step_by_step.ipynb \
+    ultralytics_yolo26x_hands_on.ipynb \
     ultralytics_yolo26x_end_to_end.ipynb \
     /opt/ultralytics-yolo26/seed/
 COPY assets /opt/ultralytics-yolo26/seed/assets
@@ -104,12 +105,12 @@ RUN set -eux; \
         /workspace/assets /workspace/data /workspace/doc /workspace/docker \
         /workspace/native /workspace/output /workspace/scripts /workspace/src \
         /workspace/tests /workspace/*.md /workspace/*.ipynb; \
-    chmod 0777 /workspace
+    chmod 0777 /workspace; \
+    test ! -e /workspace/models
 
 COPY --link models /opt/ultralytics-yolo26/models
 
 RUN set -eux; \
-    ln -s /opt/ultralytics-yolo26/models /workspace/models; \
     cd /opt/ultralytics-yolo26/models; \
     test "$(sha256sum yolo26x.pt | cut -d' ' -f1)" = "${YOLO_CHECKPOINT_SHA256}"; \
     test "$(sha256sum yolo26x.onnx | cut -d' ' -f1)" = "${YOLO_ONNX_SHA256}"; \
@@ -138,6 +139,7 @@ ENV ULTRALYTICS_COMMIT=${ULTRALYTICS_COMMIT} \
     ULTRALYTICS_QWEN_GGUF_SHA256=${QWEN_GGUF_SHA256} \
     ULTRALYTICS_QWEN_MMPROJ_SHA256=${QWEN_MMPROJ_SHA256} \
     ULTRALYTICS_MODEL_SET_SHA256=${MODEL_SET_SHA256} \
+    ULTRALYTICS_WORKSHOP_SEED_DIR=/opt/ultralytics-yolo26/seed \
     ULTRALYTICS_BAKED_MODEL_DIR=/opt/ultralytics-yolo26/models \
     ONNXRUNTIME_MIGRAPHX_VERSION=${ONNXRUNTIME_MIGRAPHX_VERSION} \
     ULTRALYTICS_YOLO26_ROOT=/workspace \

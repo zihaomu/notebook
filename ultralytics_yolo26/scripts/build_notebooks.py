@@ -75,25 +75,103 @@ import sys
 from pathlib import Path
 
 
+NOTEBOOK_DIR = Path.cwd().resolve()
+BAKED_SEED = Path(os.environ.get(
+    "ULTRALYTICS_WORKSHOP_SEED_DIR", "/opt/ultralytics-yolo26/seed"
+)).resolve()
+BAKED_MODELS = Path(os.environ.get(
+    "ULTRALYTICS_BAKED_MODEL_DIR", "/opt/ultralytics-yolo26/models"
+)).resolve()
+
+
+def is_package_root(path: Path) -> bool:
+    return (
+        (path / "scripts/notebook_env.py").is_file()
+        and (path / "src").is_dir()
+        and (path / "data").is_dir()
+    )
+
+
 def find_package_root() -> Path:
-    origins = [Path.cwd(), *(Path(value) for value in sys.path if value)]
-    for origin in origins:
-        for candidate in (origin, *origin.parents):
-            if (
-                (candidate / "scripts/notebook_env.py").is_file()
-                and (candidate / "src").is_dir()
-                and (candidate / "data").is_dir()
-            ):
-                return candidate.resolve()
-    raise FileNotFoundError("Run this notebook from the ultralytics_yolo26 folder")
+    candidates = []
+    for variable in ("ULTRALYTICS_YOLO26_ROOT", "OPENCV_AMD_END2END_ROOT"):
+        if os.environ.get(variable):
+            candidates.append(Path(os.environ[variable]).expanduser())
+    candidates.extend([NOTEBOOK_DIR, *NOTEBOOK_DIR.parents])
+    candidates.extend(Path(value) for value in sys.path if value)
+    candidates.append(BAKED_SEED)
+
+    visited = set()
+    for origin in candidates:
+        try:
+            resolved = origin.resolve()
+        except (OSError, RuntimeError):
+            continue
+        for candidate in (resolved, *resolved.parents):
+            if candidate in visited:
+                continue
+            visited.add(candidate)
+            if is_package_root(candidate):
+                return candidate
+    raise FileNotFoundError(
+        "Cannot find the ultralytics_yolo26 sources from the current directory "
+        f"({NOTEBOOK_DIR}) or immutable seed ({BAKED_SEED})."
+    )
+
+
+def map_baked_models(work_dir: Path, source_dir: Path) -> tuple[Path, str]:
+    required = (
+        "yolo26x.pt",
+        "yolo26x.onnx",
+        "Qwen3-VL-8B-Instruct-Q8_0.gguf",
+        "mmproj-F16.gguf",
+    )
+    missing = [name for name in required if not (source_dir / name).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"Baked model directory is incomplete: {source_dir}; missing={missing}"
+        )
+
+    alias = work_dir / "models"
+    if alias.is_symlink():
+        if alias.resolve() != source_dir:
+            alias.unlink()
+            alias.symlink_to(source_dir, target_is_directory=True)
+        return alias.resolve(), "symlink"
+    if alias.exists():
+        if alias.resolve() == source_dir:
+            return source_dir, "existing mapping"
+        local_missing = [name for name in required if not (alias / name).is_file()]
+        if local_missing:
+            raise RuntimeError(
+                f"Cannot map baked models: {alias} is an existing real path and "
+                f"does not contain the release model set (missing={local_missing}). "
+                "Remove that mount/directory or set ULTRALYTICS_YOLO26_MODEL_DIR "
+                "to a complete model set."
+            )
+        return alias.resolve(), "existing model directory"
+
+    try:
+        alias.symlink_to(source_dir, target_is_directory=True)
+        return alias.resolve(), "symlink"
+    except OSError as error:
+        print(
+            f"[bootstrap] Cannot create {alias} -> {source_dir}: {error}. "
+            "Using the immutable model directory directly."
+        )
+        return source_dir, "direct fallback"
 
 
 ROOT = find_package_root()
+MODEL_DIR, MODEL_MAPPING = map_baked_models(NOTEBOOK_DIR, BAKED_MODELS)
+OUTPUT_DIR = NOTEBOOK_DIR / "output"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 os.environ["ULTRALYTICS_YOLO26_ROOT"] = str(ROOT)
-os.environ["ULTRALYTICS_YOLO26_MODEL_DIR"] = str(ROOT / "models")
-os.environ["ULTRALYTICS_YOLO26_OUTPUT_DIR"] = str(ROOT / "output")
-os.environ.setdefault(
-    "ULTRALYTICS_MIGRAPHX_CACHE_ROOT", str(ROOT / "models/ort-migraphx-cache")
+os.environ["ULTRALYTICS_YOLO26_MODEL_DIR"] = str(MODEL_DIR)
+os.environ["ULTRALYTICS_YOLO26_OUTPUT_DIR"] = str(OUTPUT_DIR)
+os.environ["ULTRALYTICS_MIGRAPHX_CACHE_ROOT"] = str(
+    MODEL_DIR / "ort-migraphx-cache"
 )
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 for value in (str(ROOT), str(ROOT / "src")):
@@ -113,49 +191,154 @@ delivery_mode = (
 )
 models = ensure_models(env.MODELS, progress=True)
 runtime = validate(require_models=True, require_vlm=False)
-print(json.dumps({"model_delivery": delivery_mode, **runtime}, indent=2))
+print(json.dumps({
+    "notebook_dir": str(NOTEBOOK_DIR),
+    "source_root": str(ROOT),
+    "model_source": str(BAKED_MODELS),
+    "model_alias": str(NOTEBOOK_DIR / "models"),
+    "model_mapping": MODEL_MAPPING,
+    "model_delivery": delivery_mode,
+    **runtime,
+}, indent=2))
 models
 '''
 
 step_cells = [
     markdown("step-title", r'''
-# YOLO26x Beyond `predict()`: A Production Video Pipeline on AMD Radeon
+# YOLO26x Step by Step: From PyTorch to a GPU-Resident Video Pipeline
 
 **Speaker:** Zihao Mu, Member of Technical Staff, Product Application Engineering, AMD
 
-Start with the Ultralytics API you already know, export YOLO26x to ONNX, then keep the complete no-VLM vision pass on the Radeon GPU:
+This notebook keeps the released YOLO + VLM workflow unchanged. It opens the black box one layer at a time and measures where time is spent:
 
 ```text
-YOLO26x checkpoint -> ONNX -> Ultralytics/ORT MIGraphX -> OpenCV GPU NMS
-                                                               |
-rocDecode -> OpenCV HIP preprocess -> GPU I/O Binding -> compact detections
-                                                               |
-                                     bounded queue + dedicated HIP stream
-                                                               |
-                    DRM PRIME VAAPI surface: RGB -> NV12 + GPU overlay -> H.264
+YOLO26x .pt
+  -> static ONNX
+  -> Ultralytics + ONNX Runtime MIGraphX EP
+  -> explicit H2D / D2H transfer lab
+  -> resident GPU buffers + I/O Binding
+  -> GPU preprocess + GPU NMS
+  -> rocDecode + direct VA-API encode
+  -> Qwen3-VL as a separately measured semantic stage
 ```
 
-The workshop uses `YOLO.predict()` as the correctness baseline. In the continuous loop, Ultralytics still owns ONNX inference, OpenCV owns preprocessing and GPU NMS, and a small native bridge owns GPU overlay plus direct VA-API surface submission.
+The goal is not to memorize one FPS number. The goal is to identify each hardware boundary, measure it with synchronization, then remove or overlap the expensive boundaries without changing model correctness.
 '''),
-    markdown("step-setup-md", "## 1. Verify the baked model set and validate Radeon"),
-    code("step-setup", setup_code),
-    markdown("step-predict-md", r'''
-## 2. Begin with the familiar `YOLO.predict()` API
+    markdown("step-setup-md", r'''
+## 1. Verify the fixed environment
 
-The official release ONNX is end-to-end: its output is already `[1, 300, 6]`. The workshop fork selects ONNX Runtime's `MIGraphXExecutionProvider`, enables FP16 compilation, and binds GPU buffers without a NumPy round trip.
+The workshop image already contains the checkpoint, release ONNX, MIGraphX cache, Qwen3-VL weights, and the patched Ultralytics backend. This cell verifies those assets before any timing result is accepted.
+'''),
+    code("step-setup", setup_code),
+    markdown("step-export-md", r'''
+## 2. Convert the YOLO26x checkpoint from PyTorch to static ONNX
+
+The export is deliberately static: batch 1, `640 x 640`, and an end-to-end `[1, 300, 6]` output. Static shapes let MIGraphX compile and reuse a stable program.
+
+The checkpoint is copied into `output/export/` first, so the export cannot overwrite the immutable release model. `RUN_EXPORT=1` is the default for this teaching notebook. Set it to `0` only when reusing the verified release ONNX.
+'''),
+    code("step-export", r'''
+import hashlib
+import shutil
+import time
+
+import onnx
+from ultralytics import YOLO
+
+RUN_EXPORT = os.environ.get("RUN_EXPORT", "1") == "1"
+export_dir = env.OUTPUT / "export"
+export_dir.mkdir(parents=True, exist_ok=True)
+
+if RUN_EXPORT:
+    checkpoint_copy = export_dir / env.YOLO_CHECKPOINT.name
+    shutil.copy2(env.YOLO_CHECKPOINT, checkpoint_copy)
+    export_started = time.perf_counter()
+    workshop_onnx = Path(
+        YOLO(str(checkpoint_copy)).export(
+            format="onnx",
+            imgsz=640,
+            batch=1,
+            dynamic=False,
+            simplify=False,
+            device=0,
+        )
+    ).resolve()
+    export_seconds = time.perf_counter() - export_started
+else:
+    workshop_onnx = env.YOLO_ONNX
+    export_seconds = None
+
+onnx_model = onnx.load(str(workshop_onnx), load_external_data=False)
+onnx.checker.check_model(onnx_model)
+input_shape = [dim.dim_value for dim in onnx_model.graph.input[0].type.tensor_type.shape.dim]
+output_shape = [dim.dim_value for dim in onnx_model.graph.output[0].type.tensor_type.shape.dim]
+metadata = {item.key: item.value for item in onnx_model.metadata_props}
+onnx_sha256 = hashlib.sha256(workshop_onnx.read_bytes()).hexdigest()
+
+export_record = {
+    "checkpoint": str(env.YOLO_CHECKPOINT),
+    "onnx": str(workshop_onnx),
+    "export_seconds": None if export_seconds is None else round(export_seconds, 3),
+    "bytes": workshop_onnx.stat().st_size,
+    "sha256": onnx_sha256,
+    "input_shape": input_shape,
+    "output_shape": output_shape,
+    "dynamic": False,
+    "task": metadata.get("task"),
+    "end2end": metadata.get("end2end"),
+}
+print(json.dumps(export_record, indent=2))
+assert input_shape == [1, 3, 640, 640]
+assert output_shape == [1, 300, 6]
+'''),
+    markdown("step-predict-md", r'''
+## 3. Run ONNX through the Ultralytics MIGraphX backend
+
+Ultralytics still owns model loading and `predict()`. The workshop fork selects `MIGraphXExecutionProvider`, enables FP16, and uses GPU I/O Binding.
+
+This cell reports three different costs:
+
+- model object construction;
+- first prediction, which includes backend initialization and cache work;
+- steady high-level `predict()` latency, which includes image preprocessing, inference, postprocessing, and result construction.
+
+By default, the ONNX produced in the previous cell runs through MIGraphX with a writable cache under `output/export/`. Set `USE_FRESH_EXPORT=0` to use the hash-verified release ONNX and its prepared cache instead.
 '''),
     code("step-predict", r'''
+import gc
+import math
+import statistics
+
 import cv2
-from ultralytics import YOLO
+import torch
+
 from migraphx_cache import prepare_cache
+
+USE_FRESH_EXPORT = os.environ.get(
+    "USE_FRESH_EXPORT", "1" if RUN_EXPORT else "0"
+) == "1"
+deployment_onnx = workshop_onnx if USE_FRESH_EXPORT else env.YOLO_ONNX
+deployment_sha256 = hashlib.sha256(deployment_onnx.read_bytes()).hexdigest()
+deployment_cache_root = (
+    export_dir / "ort-migraphx-cache"
+    if USE_FRESH_EXPORT
+    else env.MIGRAPHX_CACHE
+)
+deployment_cache_root.mkdir(parents=True, exist_ok=True)
+os.environ["ULTRALYTICS_MIGRAPHX_CACHE_ROOT"] = str(deployment_cache_root)
+cache_dir, cache_identity = prepare_cache(deployment_onnx, deployment_cache_root, 0)
 
 capture = cv2.VideoCapture(str(env.SOURCE_VIDEO))
 ok, first_frame = capture.read()
 capture.release()
 assert ok
 
-cache_dir, cache_identity = prepare_cache(env.YOLO_ONNX, env.MIGRAPHX_CACHE, 0)
-yolo = YOLO(str(env.YOLO_ONNX), task="detect")
+construct_started = time.perf_counter()
+yolo = YOLO(str(deployment_onnx), task="detect")
+construct_ms = (time.perf_counter() - construct_started) * 1000
+
+torch.cuda.synchronize()
+first_started = time.perf_counter()
 result = yolo.predict(
     first_frame,
     device=0,
@@ -165,314 +348,902 @@ result = yolo.predict(
     iou=0.45,
     verbose=False,
 )[0]
+torch.cuda.synchronize()
+first_predict_ms = (time.perf_counter() - first_started) * 1000
+
+predict_samples_ms = []
+for _ in range(12):
+    torch.cuda.synchronize()
+    started = time.perf_counter()
+    result = yolo.predict(
+        first_frame,
+        device=0,
+        half=True,
+        imgsz=640,
+        conf=0.5,
+        iou=0.45,
+        verbose=False,
+    )[0]
+    torch.cuda.synchronize()
+    predict_samples_ms.append((time.perf_counter() - started) * 1000)
+
 backend = yolo.predictor.model.backend
 assert backend.provider == "MIGraphXExecutionProvider"
 assert backend.use_io_binding and backend.migraphx_fp16
-print({
-    "boxes": len(result.boxes),
+ordered_predict = sorted(predict_samples_ms)
+predict_p50_ms = statistics.median(predict_samples_ms)
+predict_p95_ms = ordered_predict[math.ceil(len(ordered_predict) * 0.95) - 1]
+result_plot = result.plot()
+backend_timing = {
+    "onnx": str(deployment_onnx),
+    "fresh_export_selected": USE_FRESH_EXPORT,
     "provider": backend.provider,
     "io_binding": backend.use_io_binding,
     "migraphx_fp16": backend.migraphx_fp16,
     "cache": str(cache_dir),
-})
-show_bgr(result.plot(), "Ultralytics YOLO26x predict() baseline")
+    "construct_ms": round(construct_ms, 3),
+    "first_predict_ms": round(first_predict_ms, 3),
+    "steady_predict_p50_ms": round(predict_p50_ms, 3),
+    "steady_predict_p95_ms": round(predict_p95_ms, 3),
+    "single_call_rate_from_p50": round(1000 / predict_p50_ms, 1),
+    "boxes": len(result.boxes),
+}
+print(json.dumps(backend_timing, indent=2))
+show_bgr(result_plot, "Ultralytics YOLO26x ONNX on MIGraphX")
+
+del result, yolo, backend
+gc.collect()
+torch.cuda.empty_cache()
 '''),
-    markdown("step-export-md", r'''
-## 3. Export the checkpoint to static ONNX
+    markdown("step-transfer-md", r'''
+## 4. Measure the transfer tax: H2D and D2H
 
-Set `RUN_EXPORT=1` to execute the real export. The default classroom path inspects the pre-exported official release asset so every attendee can move directly to deployment. Export uses a copy of the checkpoint and never overwrites the verified release ONNX.
+`H2D` copies host memory to GPU memory. `D2H` copies GPU memory back to the host. These synchronized measurements time one preallocated copy at a time; allocation and random-data generation are outside the timed region.
+
+We compare:
+
+- a full `1920 x 1080` RGB frame;
+- a `1 x 3 x 640 x 640` FP32 model input;
+- the compact `1 x 300 x 6` FP32 model output;
+- pageable and pinned host memory.
+
+Pinned memory can enable asynchronous DMA, but `non_blocking=True` alone does not make a dependency disappear. This cell synchronizes after every copy to measure completion rather than enqueue time. The exact numbers are machine-specific; the payload-size contrast is the transferable lesson.
 '''),
-    code("step-export", r'''
-import ast
-import shutil
-import onnx
+    code("step-transfer", r'''
+from IPython.display import display
+import pandas as pd
 
-RUN_EXPORT = os.environ.get("RUN_EXPORT", "0") == "1"
-export_dir = env.OUTPUT / "export"
-export_dir.mkdir(parents=True, exist_ok=True)
-if RUN_EXPORT:
-    checkpoint_copy = export_dir / env.YOLO_CHECKPOINT.name
-    shutil.copy2(env.YOLO_CHECKPOINT, checkpoint_copy)
-    exported_path = Path(
-        YOLO(str(checkpoint_copy)).export(
-            format="onnx",
-            imgsz=640,
-            batch=1,
-            dynamic=False,
-            simplify=False,
-            device=0,
-        )
-    )
-else:
-    exported_path = env.YOLO_ONNX
 
-onnx_model = onnx.load(str(exported_path), load_external_data=False)
-input_shape = [item.dim_value for item in onnx_model.graph.input[0].type.tensor_type.shape.dim]
-output_shape = [item.dim_value for item in onnx_model.graph.output[0].type.tensor_type.shape.dim]
-metadata = {item.key: item.value for item in onnx_model.metadata_props}
-print({
-    "path": str(exported_path),
-    "bytes": exported_path.stat().st_size,
-    "input": input_shape,
-    "output": output_shape,
-    "end2end": metadata.get("end2end"),
-    "task": metadata.get("task"),
-})
-assert input_shape == [1, 3, 640, 640]
-assert output_shape == [1, 300, 6]
+def percentile(values, fraction):
+    ordered = sorted(values)
+    return ordered[math.ceil(len(ordered) * fraction) - 1]
+
+
+def measure_transfer(operation, payload_bytes, repeats=50, warmup=5):
+    for _ in range(warmup):
+        operation()
+        torch.cuda.synchronize()
+    samples_ms = []
+    for _ in range(repeats):
+        torch.cuda.synchronize()
+        started = time.perf_counter()
+        operation()
+        torch.cuda.synchronize()
+        samples_ms.append((time.perf_counter() - started) * 1000)
+    p50_ms = statistics.median(samples_ms)
+    p95_ms = percentile(samples_ms, 0.95)
+    return {
+        "p50_ms": round(p50_ms, 4),
+        "p95_ms": round(p95_ms, 4),
+        "effective_GBps": round(payload_bytes / (p50_ms * 1_000_000), 3),
+        "share_of_25fps_budget_pct": round(p50_ms / 40.0 * 100, 2),
+    }
+
+
+transfer_cases = [
+    ("1080p RGB frame", (1080, 1920, 3), torch.uint8),
+    ("640x640 model input", (1, 3, 640, 640), torch.float32),
+    ("300x6 compact output", (1, 300, 6), torch.float32),
+]
+transfer_results = []
+for payload_name, shape, dtype in transfer_cases:
+    pageable_source = torch.empty(shape, dtype=dtype, device="cpu")
+    pinned_source = torch.empty(shape, dtype=dtype, device="cpu", pin_memory=True)
+    gpu_buffer = torch.empty(shape, dtype=dtype, device="cuda:0")
+    pageable_destination = torch.empty(shape, dtype=dtype, device="cpu")
+    pinned_destination = torch.empty(shape, dtype=dtype, device="cpu", pin_memory=True)
+    payload_bytes = gpu_buffer.numel() * gpu_buffer.element_size()
+    operations = [
+        ("H2D", "pageable", lambda: gpu_buffer.copy_(pageable_source, non_blocking=False)),
+        ("H2D", "pinned", lambda: gpu_buffer.copy_(pinned_source, non_blocking=True)),
+        ("D2H", "pageable", lambda: pageable_destination.copy_(gpu_buffer, non_blocking=False)),
+        ("D2H", "pinned", lambda: pinned_destination.copy_(gpu_buffer, non_blocking=True)),
+    ]
+    for direction, host_memory, operation in operations:
+        transfer_results.append({
+            "payload": payload_name,
+            "direction": direction,
+            "host_memory": host_memory,
+            "payload_MiB": round(payload_bytes / 1024**2, 3),
+            **measure_transfer(operation, payload_bytes),
+        })
+
+transfer_table = pd.DataFrame(transfer_results)
+display(transfer_table)
 '''),
     markdown("step-resident-md", r'''
-## 4. Move from an image call to resident video buffers
+## 5. Remove repeated transfers with resident GPU buffers
 
-The production adapter is initialized by `YOLO(...)` and keeps the Ultralytics predictor/backend alive. rocDecode returns a DLPack GPU tensor. OpenCV HIP reuses fixed padded, HWC, and BCHW buffers before the Ultralytics backend writes into a pre-bound GPU output.
+The production adapter initializes Ultralytics once, keeps the ORT/MIGraphX backend alive, and reuses fixed input/output allocations. rocDecode produces a DLPack GPU tensor; OpenCV HIP writes directly into reusable preprocessing buffers; I/O Binding writes the model output into a stable GPU tensor.
+
+This cell times inference only. Compare it with the high-level `predict()` result, but do not call the difference “transfer time”: the high-level API also includes preprocessing, postprocessing, and Python result construction.
 '''),
     code("step-resident", r'''
+import config as pipeline_config
+
+pipeline_config = importlib.reload(pipeline_config)
+pipeline_config.YOLO_MODEL_PATH = str(deployment_onnx)
+
 from detector import UltralyticsYOLODetector
 from preprocess import GPUPreprocessor
 from video_io import RocDecodeReader
 
 reader = RocDecodeReader(str(env.SOURCE_VIDEO), device_id=0)
 processor = GPUPreprocessor((640, 640), device="cuda:0")
-detector = UltralyticsYOLODetector(model_path=str(env.YOLO_ONNX), device_id=0)
+detector = UltralyticsYOLODetector(model_path=str(deployment_onnx), device_id=0)
 try:
     ok, rgb_gpu = reader.read_gpu()
     assert ok and rgb_gpu.is_cuda
     blob_gpu, scale, pad_w, pad_h = processor.process(rgb_gpu)
-    raw_gpu = detector.infer_gpu(blob_gpu)
+    for _ in range(5):
+        raw_gpu = detector.infer_gpu(blob_gpu)
+    torch.cuda.synchronize()
+    resident_samples_ms = []
+    input_pointer = blob_gpu.data_ptr()
+    output_pointer = raw_gpu.data_ptr()
+    for _ in range(30):
+        torch.cuda.synchronize()
+        started = time.perf_counter()
+        raw_gpu = detector.infer_gpu(blob_gpu)
+        torch.cuda.synchronize()
+        resident_samples_ms.append((time.perf_counter() - started) * 1000)
+        assert blob_gpu.data_ptr() == input_pointer
+        assert raw_gpu.data_ptr() == output_pointer
     detections = detector._parse_gpu(
         raw_gpu, scale, pad_w, pad_h, tuple(rgb_gpu.shape)
     )
 finally:
     reader.release()
 
+resident_inference = {
+    "p50_ms": round(statistics.median(resident_samples_ms), 3),
+    "p95_ms": round(percentile(resident_samples_ms, 0.95), 3),
+    "input_pointer": input_pointer,
+    "output_pointer": output_pointer,
+}
 print(json.dumps({
-    "decoded": {"shape": list(rgb_gpu.shape), "device": str(rgb_gpu.device), "pointer": rgb_gpu.data_ptr()},
+    "decoded": {
+        "shape": list(rgb_gpu.shape),
+        "device": str(rgb_gpu.device),
+        "pointer": rgb_gpu.data_ptr(),
+    },
     "preprocess": {**processor.pointer_info(), "shape": list(blob_gpu.shape)},
-    "inference": detector.provider_info(),
+    "inference": {**detector.provider_info(), "timing": resident_inference},
     "detections": detections,
 }, indent=2))
 assert blob_gpu.device.type == "cuda" and raw_gpu.device.type == "cuda"
+
+del detector, processor, raw_gpu, blob_gpu, rgb_gpu
+gc.collect()
+torch.cuda.empty_cache()
 '''),
     markdown("step-parity-md", r'''
-## 5. Check `predict()` to production parity
+## 6. Protect correctness before optimizing further
 
-The two paths use different letterbox implementations, so byte-identical boxes are not expected. They must produce the same box count and classes, with class-matched IoU above 0.90.
+The convenience path and production path use different letterbox implementations, so byte-identical boxes are not required. They must retain the same box count and classes, with class-matched IoU above 0.90. A faster path that fails this gate is not an optimization.
 '''),
     code("step-parity", r'''
 from tests.test_predict_production_parity import validate as validate_parity
 
-parity = validate_parity(env.YOLO_ONNX, env.SOURCE_VIDEO, minimum_iou=0.90)
+parity = validate_parity(deployment_onnx, env.SOURCE_VIDEO, minimum_iou=0.90)
 print(json.dumps(parity, indent=2))
+gc.collect()
+torch.cuda.empty_cache()
 '''),
     markdown("step-benchmark-md", r'''
-## 6. Benchmark the GPU-resident detection path
+## 7. Measure every GPU-resident stage
 
-This benchmark excludes CPU overlay and encoded-video transport. It synchronizes each GPU stage and reports mean, P50, and P95 latency after warmup. It also asserts that all reusable buffer pointers stay unchanged.
+This benchmark separates rocDecode, OpenCV HIP preprocessing, Ultralytics/MIGraphX inference, and OpenCV GPU NMS. It synchronizes every stage, reports mean/P50/P95 after warmup, and fails if any reusable pointer changes.
 
-A rocprof trace over 50 steady-state calls recorded zero memory-copy operations for both native MIGraphX and Ultralytics/ORT I/O Binding. The historical 50.8 FPS result is from a different date and ONNX, not a same-run backend comparison.
+The benchmark excludes overlay and encoded-video transport. Its FPS is therefore a stage-boundary measurement, not the final video FPS.
 '''),
     code("step-benchmark", r'''
 from tests.benchmark_gpu_stages import benchmark
 
 RUN_BENCHMARK = os.environ.get("RUN_BENCHMARK", "0") == "1"
-benchmark_path = env.OUTPUT / "benchmarks/gpu_stages.json"
+benchmark_path = env.OUTPUT / f"benchmarks/gpu_stages_{deployment_sha256[:12]}.json"
 if RUN_BENCHMARK or not benchmark_path.is_file():
-    gpu_benchmark = benchmark(env.SOURCE_VIDEO, frames=120, warmup=10)
+    gpu_benchmark = benchmark(
+        env.SOURCE_VIDEO,
+        frames=120,
+        warmup=10,
+        model_path=deployment_onnx,
+    )
     benchmark_path.parent.mkdir(parents=True, exist_ok=True)
     benchmark_path.write_text(json.dumps(gpu_benchmark, indent=2) + "\n")
 else:
     gpu_benchmark = json.loads(benchmark_path.read_text())
 print(json.dumps({
+    "model": str(deployment_onnx),
     "stages": gpu_benchmark["stages"],
     "gpu_path_mean_ms": gpu_benchmark["gpu_path_mean_ms"],
     "gpu_path_fps": gpu_benchmark["gpu_path_fps"],
     "stable_pointers": gpu_benchmark["stable_pointers"],
 }, indent=2))
 '''),
-    markdown("step-video-md", r'''
-## 7. Connect inference to the production video loop
+    markdown("step-optimization-md", r'''
+## 8. Build the optimization ladder
 
-The command below forces hardware decode and `vaapi-direct`. A bounded worker queue holds each resident RGB tensor, waits on a producer event from the inference stream, then performs RGB-to-NV12 and box/text/status overlay on a dedicated HIP stream inside a separate FFmpeg-owned DRM PRIME VA-API encoder surface. `VAAPI_DEVICE` selects the render node assigned by Radeon Cloud.
+Optimization should remove the largest repeated boundary first, then remeasure the whole relevant path:
+
+1. **Static ONNX + MIGraphX FP16 cache** removes repeated graph interpretation and compilation.
+2. **Pinned host memory** enables asynchronous DMA when a host input is unavoidable.
+3. **rocDecode + DLPack** removes full-frame H2D from file decode.
+4. **OpenCV HIP preprocessing** avoids a GPU-frame D2H followed by a model-input H2D.
+5. **Stable buffers + ORT I/O Binding** remove model input/output round trips and allocation churn.
+6. **GPU confidence filtering + NMS** reduces D2H to compact surviving detections.
+7. **HIP overlay + direct VA-API** removes the full-frame D2H/raw-video pipe before encode.
+8. **Sparse, separately timed VLM calls** prevent a hundreds-of-milliseconds semantic stage from defining per-frame detector throughput.
+
+Pinned memory improves transfer mechanics; GPU residency removes the transfer. Prefer removal when the surrounding APIs allow it.
 '''),
-    code("step-video", r'''
-from scripts import pipeline_workflow as workflow
+    code("step-optimization", r'''
+full_frame_transfers = transfer_table[transfer_table["payload"] == "1080p RGB frame"]
+pageable_h2d = full_frame_transfers[
+    (full_frame_transfers["direction"] == "H2D")
+    & (full_frame_transfers["host_memory"] == "pageable")
+].iloc[0]
+pageable_d2h = full_frame_transfers[
+    (full_frame_transfers["direction"] == "D2H")
+    & (full_frame_transfers["host_memory"] == "pageable")
+].iloc[0]
 
-print(" ".join(workflow.pipeline_command(max_frames=120)))
-print("VA-API device:", os.environ.get("VAAPI_DEVICE", "/dev/dri/renderD128"))
+optimization_ledger = pd.DataFrame([
+    {
+        "measurement": "Ultralytics high-level predict",
+        "p50_ms": backend_timing["steady_predict_p50_ms"],
+        "scope": "CPU image -> Results",
+        "lesson": "Convenient baseline; includes more than inference",
+    },
+    {
+        "measurement": "1080p pageable H2D",
+        "p50_ms": pageable_h2d["p50_ms"],
+        "scope": "One full RGB frame",
+        "lesson": "Avoid with GPU decode or overlap when unavoidable",
+    },
+    {
+        "measurement": "1080p pageable D2H",
+        "p50_ms": pageable_d2h["p50_ms"],
+        "scope": "One full RGB frame",
+        "lesson": "Copy compact metadata instead of full frames",
+    },
+    {
+        "measurement": "Resident MIGraphX inference",
+        "p50_ms": resident_inference["p50_ms"],
+        "scope": "GPU input -> GPU output",
+        "lesson": "Stable I/O Binding isolates model execution",
+    },
+    {
+        "measurement": "GPU-resident stage path",
+        "p50_ms": gpu_benchmark["gpu_path_mean_ms"],
+        "scope": "Decode + preprocess + inference + GPU NMS",
+        "lesson": "Measure this boundary before overlay and encode",
+    },
+])
+display(optimization_ledger)
 '''),
     markdown("step-vlm-md", r'''
-## 8. Extend detections with Qwen3-VL scene understanding
+## 9. Measure VLM input and output separately
 
-YOLO answers *what and where* for every frame. Qwen3-VL samples short temporal segments and adds *what is happening* as a timeline and subtitle track. The VLM runs asynchronously from the detector and its latency is reported separately.
+The released workflow keeps Qwen3-VL as a separate scene-analysis pass. Every four-second segment becomes one three-frame storyboard, one HTTP request, and one caption. This is not detector-driven reasoning, and its latency must not be folded into YOLO FPS.
+
+The cell displays exactly what the VLM received and what it returned. Set `RUN_VLM_LIVE=1` to repeat the first request against the persistent llama.cpp service; otherwise it reuses the verified timeline.
 '''),
     code("step-vlm", r'''
 from scripts import pipeline_workflow as workflow
 
+RUN_VLM_LIVE = os.environ.get("RUN_VLM_LIVE", "0") == "1"
 if workflow.TIMELINE.is_file():
     timeline = json.loads(workflow.TIMELINE.read_text())
-    for segment in timeline["segments"]:
-        print(f'{segment["start"]:4.1f}-{segment["end"]:4.1f}s  {segment["caption"]}')
+    first_segment = timeline["segments"][0]
+    storyboard_path = workflow.RUN_DIR / first_segment["storyboard"]
+    storyboard = cv2.imread(str(storyboard_path))
+    assert storyboard is not None
+    show_bgr(storyboard, "Qwen3-VL input: three chronological full-scene frames")
+
+    vlm_record = {
+        "backend": timeline["backend"],
+        "model": timeline["model"],
+        "interval_seconds": timeline["interval_seconds"],
+        "input": str(storyboard_path),
+        "sample_times": first_segment["sample_times"],
+        "output": first_segment["caption"],
+        "latency_seconds": first_segment["latency_seconds"],
+        "source": "verified timeline",
+    }
+    if RUN_VLM_LIVE:
+        from vlm_client import LlamaCppVLMClient
+
+        client = LlamaCppVLMClient(base_url=env.LLAMACPP_BASE_URL)
+        assert client.health_check()
+        started = time.perf_counter()
+        live_output = client.describe_roi(storyboard, timeline["prompt"])
+        vlm_record.update({
+            "output": live_output,
+            "latency_seconds": round(time.perf_counter() - started, 3),
+            "source": "live request",
+        })
+    print(json.dumps(vlm_record, indent=2))
 else:
-    print("Run the end-to-end notebook to generate the Qwen3-VL timeline.")
+    print("Run the End-to-end Notebook once to generate the verified Qwen3-VL timeline.")
+'''),
+    markdown("step-video-md", r'''
+## 10. Connect the optimized stages to the unchanged production workflow
+
+The production command still runs the released YOLO-only GPU path. It forces rocDecode and `vaapi-direct`: a bounded worker queue holds the resident RGB tensor, then a dedicated HIP stream performs RGB-to-NV12, box/text overlay, and submission to a DRM PRIME VA-API surface.
+
+The End-to-end Notebook runs this command and then performs the existing VLM scene-analysis/render pass. This Step-by-step Notebook explains the costs; it does not change their orchestration.
+'''),
+    code("step-video", r'''
+from scripts import pipeline_workflow as workflow
+
+os.environ["ULTRALYTICS_MIGRAPHX_CACHE_ROOT"] = str(env.MIGRAPHX_CACHE)
+print("Production YOLO command:")
+print(" ".join(workflow.pipeline_command(max_frames=120)))
+print("VA-API device:", os.environ.get("VAAPI_DEVICE", "/dev/dri/renderD128"))
+
+if workflow.MANIFEST.is_file():
+    manifest = json.loads(workflow.MANIFEST.read_text())
+    print(json.dumps(manifest["pipeline"]["performance"], indent=2))
+else:
+    print("Run the End-to-end Notebook to create the production manifest.")
 '''),
     markdown("step-audit-md", r'''
-## 9. Copy audit
+## 11. Copy audit and takeaways
 
-**Main YOLO/no-VLM pass: no full-frame D2H**
+### Final YOLO/no-VLM production path
 
-- rocDecode surface -> DLPack tensor
-- fixed OpenCV HIP preprocess buffers
-- fixed Ultralytics/ORT GPU input and output bindings
-- OpenCV GPU confidence filtering and NMS
-- resident RGB tensor held by a bounded queue
-- HIP RGB-to-NV12 plus box/text/status overlay
-- DRM PRIME VAAPI encoder surface -> `h264_vaapi`
+```text
+H.264
+  -> rocDecode GPU frame
+  -> OpenCV HIP preprocess
+  -> Ultralytics / ORT MIGraphX FP16 with I/O Binding
+  -> OpenCV GPU filtering and NMS
+  -> compact detections D2H
+  -> HIP overlay + RGB-to-NV12
+  -> direct VA-API H.264 encode
+```
 
-**Explicit host boundaries**
+There is no full-frame D2H in this path. Compact boxes/classes/scores cross to the host after GPU NMS. Notebook visualization, the JPEG/HTTP VLM input, and the subtitle renderer remain explicit host boundaries.
 
-- compact surviving boxes/classes/scores copied after GPU NMS
-- notebook visualization downloads only the selected display frame
-- Qwen3-VL baseline uses JPEG/HTTP transport
-- subtitle rendering retains CPU text layout and the host-frame VA-API writer
-- `--gpu-direct-encode off` retains the full-frame D2H/raw-pipe fallback
+### Optimization method
 
-The direct bridge writes into a separate FFmpeg-owned encoder surface; it is not rocDecode-surface passthrough. The main vision pass has zero full-frame D2H, while the Qwen3-VL and subtitle pass still has documented host boundaries.
+1. Define the measurement boundary.
+2. Warm up compilation and caches.
+3. Synchronize asynchronous hardware before stopping a latency timer.
+4. Separate model execution from preprocessing, postprocessing, and transport.
+5. Remove repeated full-frame copies before micro-optimizing kernels.
+6. Reuse allocations and verify pointer stability.
+7. Protect every optimization with a parity or artifact-integrity gate.
+8. Report P50/P95 and environment load, not only the best FPS.
 
+**Takeaway:** moving a model to the GPU is only the first step. A fast pipeline keeps data on the right device, moves only compact results, overlaps independent work, and measures the entire boundary it claims to optimize.
+'''),
+]
 
-A whole-loop rocprof CSV/JSON export was attempted, but ROCm 7.2.1 failed in its result writer after the application completed (`ring_buffer mmap errno 22`), leaving unusable output. It is not counted as trace evidence. The successful 50-call `MEASURE_YOLO` inference trace remains a separate, narrower proof.
+hands_cells = [
+    markdown("hands-title", r'''
+# YOLO26 + VLM Hands-on: Make the Coordination Decisions
+
+You will run the same video through three controlled experiments:
+
+```text
+YOLO-only -> VLM-only -> YOLO + asynchronous ROI VLM
+```
+
+Then you will change one supported parameter, compare evidence, and design how a future system should move from fixed polling to meaningful coordination.
+
+**Submission:** one `decision.json`, one A/B comparison, and one six-part coordination answer.
+'''),
+    markdown("hands-setup-md", r'''
+## 1. Map the in-image models and verify both services
+
+The Notebook may start in any directory. The first code cell creates `./models` as a symlink to the immutable model directory inside the image, discovers the current source tree or immutable seed, and creates `./output` for this run. It never downloads models in baked mode.
+'''),
+    code("hands-setup", setup_code + r'''
+from scripts.model_setup import wait_for_llamacpp
+
+vlm_service = wait_for_llamacpp(timeout=60, progress=False)
+print(json.dumps({
+    "model_mapping": MODEL_MAPPING,
+    "models": str(env.MODELS),
+    "output": str(env.OUTPUT),
+    "vlm_model": vlm_service["data"][0]["id"],
+}, indent=2))
+'''),
+    markdown("hands-source-md", r'''
+## 2. Inspect the video and predict the top ROIs
+
+Before running the VLM, inspect one YOLO frame. Write down which detections you expect a confidence-ranked top-3 policy to select, and whether those are necessarily the most useful objects for scene understanding.
+'''),
+    code("hands-source", r'''
+import gc
+import time
+
+import cv2
+import pandas as pd
+import torch
+from IPython.display import display
+
+from detector import UltralyticsYOLODetector
+from postprocess import draw_detections
+from preprocess import preprocess_frame_cpu
+
+hands_on_dir = env.OUTPUT / "hands_on"
+hands_on_dir.mkdir(parents=True, exist_ok=True)
+source_info = video_info(env.SOURCE_VIDEO)
+first_frame = frame_at(env.SOURCE_VIDEO, 0.0)
+detector = UltralyticsYOLODetector(str(env.YOLO_ONNX), device_id=0)
+blob, scale, pad_w, pad_h = preprocess_frame_cpu(first_frame)
+detections = detector.detect_and_parse(blob, scale, pad_w, pad_h, first_frame.shape)
+ranked_detections = sorted(detections, key=lambda item: item[4], reverse=True)
+top_detections = ranked_detections[:3]
+
+annotated = first_frame.copy()
+draw_detections(annotated, detections, names=detector.names)
+show_bgr(annotated, "First frame: predict which top-3 ROIs the VLM will receive")
+display(pd.DataFrame(
+    [
+        {
+            "rank": rank,
+            "class": detector.names[int(det[5])],
+            "confidence": round(float(det[4]), 4),
+            "bbox": [round(float(value), 1) for value in det[:4]],
+        }
+        for rank, det in enumerate(top_detections, 1)
+    ]
+))
+
+x1, y1, x2, y2 = [int(value) for value in top_detections[0][:4]]
+selected_roi = first_frame[max(0, y1):max(y1 + 1, y2), max(0, x1):max(x1 + 1, x2)].copy()
+selected_roi_path = hands_on_dir / "selected_top1_roi.jpg"
+assert selected_roi.size and cv2.imwrite(str(selected_roi_path), selected_roi)
+print(json.dumps({"source": source_info, "selected_roi": str(selected_roi_path)}, indent=2))
+
+del detector
+gc.collect()
+torch.cuda.empty_cache()
+'''),
+    markdown("hands-yolo-md", r'''
+## 3. Establish a fair YOLO-only baseline
+
+This baseline deliberately uses the same CPU overlay and VA-API writer boundary as the async ROI run. It is not the faster `vaapi-direct` release benchmark. Keeping the non-VLM stages equal makes the A/B comparison meaningful.
+'''),
+    code("hands-yolo", r'''
+from scripts.async_roi_workflow import run_experiment
+
+RUN_HANDS_ON = os.environ.get("RUN_HANDS_ON", "0") == "1"
+HANDS_ON_FRAMES = int(os.environ.get("HANDS_ON_FRAMES", "120"))
+yolo_only = run_experiment(
+    output_dir=hands_on_dir,
+    mode="yolo-only",
+    max_frames=HANDS_ON_FRAMES,
+    force=RUN_HANDS_ON,
+)
+print(json.dumps({
+    "frames": yolo_only["metrics"]["frames"],
+    "fps": yolo_only["metrics"]["fps"],
+    "detection_mean_ms": yolo_only["metrics"]["detection_mean_ms"],
+    "frame_d2h_mean_ms": yolo_only["metrics"]["frame_d2h_mean_ms"],
+    "video": yolo_only["video"],
+}, indent=2))
+'''),
+    markdown("hands-vlm-md", r'''
+## 4. Measure one VLM request before adding concurrency
+
+The selected ROI is JPEG-encoded and sent to the persistent llama.cpp service. This client wall time includes JPEG, Base64, HTTP, vision encoding, prompt evaluation, and generation. Predict the latency before running the cell.
+'''),
+    code("hands-vlm", r'''
+from vlm_client import LlamaCppVLMClient
+
+vlm_client = LlamaCppVLMClient(base_url=env.LLAMACPP_BASE_URL)
+assert vlm_client.health_check()
+vlm_prompt = "Describe only the visible object and its immediate context in one concise sentence."
+started = time.perf_counter()
+vlm_only_output = vlm_client.describe_roi(selected_roi, vlm_prompt)
+vlm_only_latency_ms = (time.perf_counter() - started) * 1000
+vlm_only = {
+    "roi": str(selected_roi_path),
+    "latency_ms": round(vlm_only_latency_ms, 3),
+    "output": vlm_only_output,
+}
+(hands_on_dir / "vlm_only.json").write_text(
+    json.dumps(vlm_only, indent=2) + "\n", encoding="utf-8"
+)
+show_bgr(selected_roi, "VLM-only input ROI")
+print(json.dumps(vlm_only, indent=2))
+'''),
+    markdown("hands-decision-md", r'''
+## 5. Decision point: choose one executable configuration
+
+Change only one variable from the baseline. The current implementation supports `interval` and `top_k` directly. `busy_policy=skip` and `transport=jpeg_http` are fixed implementation facts, not pretend switches.
+'''),
+    code("hands-decision", r'''
+from scripts.async_roi_workflow import pipeline_command
+
+# Edit one supported value, then explain your prediction before running.
+DECISION = {
+    "vlm_interval_frames": int(os.environ.get("HANDS_ON_INTERVAL", "30")),
+    "vlm_top_k": int(os.environ.get("HANDS_ON_TOP_K", "3")),
+    "busy_policy": "skip",
+    "transport": "jpeg_http",
+    "gpu_placement": os.environ.get("HANDS_ON_GPU_PLACEMENT", "single_gpu"),
+    "max_frames": HANDS_ON_FRAMES,
+}
+assert DECISION["vlm_interval_frames"] in {15, 30, 60}
+assert DECISION["vlm_top_k"] in {1, 3}
+assert DECISION["busy_policy"] == "skip"
+assert DECISION["transport"] == "jpeg_http"
+assert DECISION["gpu_placement"] in {"single_gpu", "split_gpu"}
+(hands_on_dir / "decision.json").write_text(
+    json.dumps(DECISION, indent=2) + "\n", encoding="utf-8"
+)
+preview_command, _ = pipeline_command(
+    output_dir=hands_on_dir,
+    mode="async-roi",
+    max_frames=DECISION["max_frames"],
+    interval=DECISION["vlm_interval_frames"],
+    top_k=DECISION["vlm_top_k"],
+)
+print(json.dumps(DECISION, indent=2))
+print("Command:", " ".join(preview_command))
+'''),
+    markdown("hands-parallel-md", r'''
+## 6. Run YOLO with asynchronous ROI VLM
+
+YOLO keeps processing frames while one accepted VLM batch runs in a background thread. At each trigger opportunity the client either accepts one top-K batch or records `skipped_busy`. Async removes software waiting; it does not remove shared-GPU contention.
+'''),
+    code("hands-parallel", r'''
+async_roi = run_experiment(
+    output_dir=hands_on_dir,
+    mode="async-roi",
+    max_frames=DECISION["max_frames"],
+    interval=DECISION["vlm_interval_frames"],
+    top_k=DECISION["vlm_top_k"],
+    drain_timeout=15.0,
+    force=RUN_HANDS_ON,
+)
+print(json.dumps({
+    "frames": async_roi["metrics"]["frames"],
+    "fps": async_roi["metrics"]["fps"],
+    "detection_mean_ms": async_roi["metrics"]["detection_mean_ms"],
+    "detection_vlm_idle": async_roi["metrics"]["detection_vlm_idle"],
+    "detection_vlm_active": async_roi["metrics"]["detection_vlm_active"],
+    "trigger_opportunities": async_roi["metrics"]["trigger_opportunities"],
+    "trigger_with_detections": async_roi["metrics"]["trigger_with_detections"],
+    "vlm": async_roi["metrics"]["vlm"],
+}, indent=2))
+'''),
+    markdown("hands-compare-md", r'''
+## 7. Read the A/B speed ledger
+
+Do not select a configuration only because it has the largest FPS. Check frame integrity, detection latency during VLM activity, skipped batches, actual completed ROIs, and semantic freshness.
+'''),
+    code("hands-compare", r'''
+from scripts.async_roi_workflow import comparison
+
+comparison_record = comparison(yolo_only, async_roi)
+comparison_path = hands_on_dir / "comparison.json"
+comparison_path.write_text(
+    json.dumps(comparison_record, indent=2) + "\n", encoding="utf-8"
+)
+display(pd.DataFrame([
+    {
+        "mode": "YOLO-only",
+        "frames": yolo_only["metrics"]["frames"],
+        "fps": yolo_only["metrics"]["fps"],
+        "detection_ms": yolo_only["metrics"]["detection_mean_ms"],
+        "submitted_batches": 0,
+        "skipped_busy": 0,
+        "completed_rois": 0,
+    },
+    {
+        "mode": "YOLO + async ROI VLM",
+        "frames": async_roi["metrics"]["frames"],
+        "fps": async_roi["metrics"]["fps"],
+        "detection_ms": async_roi["metrics"]["detection_mean_ms"],
+        "submitted_batches": async_roi["metrics"]["vlm"]["submitted_batches"],
+        "skipped_busy": async_roi["metrics"]["vlm"]["skipped_busy"],
+        "completed_rois": async_roi["metrics"]["vlm"]["completed_rois"],
+    },
+]))
+print(json.dumps(comparison_record, indent=2))
+'''),
+    markdown("hands-design-md", r'''
+## 8. Design challenge: turn polling into purposeful coordination
+
+The current system polls every N frames and selects confidence-ranked ROIs. Design the next version without implementing it today. Your answer must specify Trigger, Evidence, Output, Backpressure, Failure, and Metrics.
+'''),
+    code("hands-design", r'''
+# Edit these six answers. Keep outputs constrained and failures explicit.
+DESIGN_ANSWER = {
+    "trigger": os.environ.get(
+        "HANDS_ON_TRIGGER",
+        "Create a candidate when a stable track enters a configured interaction zone.",
+    ),
+    "evidence": "Send before/trigger/after full-scene frames, subject ROI, and track metadata.",
+    "output": "Return one allowlisted event label, visible facts, and uncertainty as JSON.",
+    "backpressure": "Keep one active request and one latest candidate; replace stale pending work.",
+    "failure": "Keep deterministic YOLO/track facts and mark semantic context unavailable.",
+    "metrics": "Measure event recall, duplicate suppression, queue delay, VLM latency, and YOLO active-window P95.",
+}
+required_answer_fields = {"trigger", "evidence", "output", "backpressure", "failure", "metrics"}
+assert set(DESIGN_ANSWER) == required_answer_fields
+assert all(str(value).strip() for value in DESIGN_ANSWER.values())
+(hands_on_dir / "design_answer.json").write_text(
+    json.dumps(DESIGN_ANSWER, indent=2) + "\n", encoding="utf-8"
+)
+print(json.dumps(DESIGN_ANSWER, indent=2))
+'''),
+    markdown("hands-takeaways-md", r'''
+## 9. Takeaways
+
+1. Async removes host-side waiting; it does not remove GPU contention.
+2. `interval` controls trigger opportunities, `top_k` controls batch width, and `--parallel 3` controls server capacity.
+3. Theoretical triggers are not submitted batches; submitted batches are not completed ROIs.
+4. Shorter intervals improve freshness but increase busy skips and contention.
+5. Fixed polling answers *how to run concurrently*; tracking and events answer *when a VLM call is worth paying for*.
 '''),
 ]
 
 end_cells = [
     markdown("e2e-title", r'''
-# Ultralytics YOLO26x Production Video Pipeline on AMD Radeon
+# YOLO26 + Qwen3-VL End to End: Asynchronous ROI Understanding
 
-This notebook runs the complete workshop workflow:
+This notebook runs the fixed workshop configuration from one video input:
 
 ```text
-video -> rocDecode -> OpenCV HIP -> Ultralytics ONNX/MIGraphX -> GPU NMS
-      -> async HIP overlay -> DRM PRIME VAAPI surface -> annotated base video
-      -> Qwen3-VL temporal scenes -> CPU subtitle render -> final MP4
+rocDecode -> OpenCV HIP -> Ultralytics/MIGraphX -> GPU NMS
+                                      |
+                         every 30 frames with detections
+                                      v
+                       top-3 ROI batch -> background thread
+                                      v
+                         llama.cpp --parallel 3
+                                      |
+                       latest completed descriptions
+                                      v
+                     CPU overlay -> VA-API encode
 ```
 
-The schema 3 manifest prevents outputs from another ONNX, GPU, ROCm/MIGraphX, ORT, Ultralytics commit, workshop patch, production vision source, or native bridge source from being silently reused.
+The VLM does not block the frame loop. It does share the same physical GPU by default, so the experiment measures real contention. This is fixed-interval ROI polling, not tracking or event-driven reasoning.
 '''),
-    markdown("e2e-setup-md", "## 1. Verify the baked model set and runtime"),
-    code("e2e-setup", setup_code),
-    markdown("e2e-provider-md", "## 2. Initialize the Ultralytics-owned MIGraphX backend"),
-    code("e2e-provider", r'''
-from detector import UltralyticsYOLODetector
+    markdown("e2e-setup-md", r'''
+## 1. Map in-image models and verify the release pair
 
-production_detector = UltralyticsYOLODetector(str(env.YOLO_ONNX), device_id=0)
-provider = production_detector.provider_info()
-print(json.dumps(provider, indent=2))
-assert provider["owner"] == "ultralytics.YOLO"
-assert provider["provider"] == "MIGraphXExecutionProvider"
-assert provider["io_binding"] and provider["migraphx_fp16"]
+The Notebook can start in any writable directory. It creates `./models` as an alias to the immutable in-image model set, discovers current sources or the immutable seed, and writes all new artifacts under `./output`.
 '''),
-    markdown("e2e-source-md", "## 3. Inspect the source video"),
+    code("e2e-setup", setup_code + r'''
+from scripts.model_setup import wait_for_llamacpp
+
+vlm_service = wait_for_llamacpp(timeout=60, progress=False)
+assert "Q8_0.gguf" in vlm_service["data"][0]["id"]
+print(json.dumps({
+    "model_mapping": MODEL_MAPPING,
+    "model_dir": str(env.MODELS),
+    "output_dir": str(env.OUTPUT),
+    "vlm_model": vlm_service["data"][0]["id"],
+    "expected_llama_slots": 3,
+}, indent=2))
+'''),
+    markdown("e2e-source-md", r'''
+## 2. Inspect the fixed input
+
+The reference clip contains 393 frames at 25 FPS. The async trigger has 14 theoretical opportunities: frame 1, then frames 30 through 390. Actual submitted batches will be fewer when the previous batch is still active.
+'''),
     code("e2e-source", r'''
-from IPython.display import HTML, display
+from IPython.display import Video, display
 
 source = video_info(env.SOURCE_VIDEO)
-print(source)
-source_url = "/files/" + env.SOURCE_VIDEO.relative_to(env.ROOT).as_posix()
-display(HTML(
-    f'<video controls preload="metadata" style="width:100%;max-width:960px" '
-    f'src="{source_url}"></video>'
-))
+print(json.dumps(source, indent=2))
+show_bgr(frame_at(env.SOURCE_VIDEO, 0.0), "Input frame 0")
+assert source["frames"] == 393 and source["fps"] == 25.0
+'''),
+    markdown("e2e-contract-md", r'''
+## 3. Lock the asynchronous execution contract
+
+These are implementation facts, not tuning controls in this Notebook:
+
+- interval: 30 frames;
+- batch width: at most 3 confidence-ranked ROIs;
+- client: one active batch, busy triggers are skipped;
+- server: 3 llama.cpp slots with prompt-cache RAM disabled;
+- transport: JPEG + Base64 + HTTP;
+- placement: pipeline and VLM share one physical GPU;
+- output: latest completed ROI descriptions, not tracked identities.
+'''),
+    code("e2e-contract", r'''
+from scripts.async_roi_workflow import pipeline_command
+
+E2E_SETTINGS = {
+    "max_frames": 0,
+    "vlm_interval_frames": 30,
+    "vlm_top_k": 3,
+    "busy_policy": "skip",
+    "transport": "jpeg_http",
+    "llama_parallel_slots": 3,
+    "gpu_placement": "single_gpu",
+    "vlm_drain_timeout_seconds": 20.0,
+}
+e2e_dir = env.OUTPUT / "async_roi_e2e"
+e2e_dir.mkdir(parents=True, exist_ok=True)
+command, _ = pipeline_command(
+    output_dir=e2e_dir,
+    mode="async-roi",
+    max_frames=E2E_SETTINGS["max_frames"],
+    interval=E2E_SETTINGS["vlm_interval_frames"],
+    top_k=E2E_SETTINGS["vlm_top_k"],
+    drain_timeout=E2E_SETTINGS["vlm_drain_timeout_seconds"],
+)
+print(json.dumps(E2E_SETTINGS, indent=2))
+print("Command:", " ".join(command))
 '''),
     markdown("e2e-run-md", r'''
-## 4. Run or reuse the complete workflow
+## 4. Run or reuse the complete A/B workflow
 
-Set `RUN_PIPELINE=1` before starting the kernel to regenerate all 393 frames and force a fresh Qwen3-VL scene analysis. Otherwise the workflow validates the model/runtime identity in `manifest.json` before reusing saved artifacts.
+`RUN_END_TO_END=1` regenerates both videos. The YOLO-only baseline deliberately uses the same CPU overlay and VA-API writer boundary as the VLM run, so the comparison isolates VLM contention rather than mixing two different encoder paths.
 '''),
     code("e2e-run", r'''
-from scripts import pipeline_workflow as workflow
+from scripts.async_roi_workflow import comparison, run_experiment, write_manifest
 
-RUN_PIPELINE = os.environ.get("RUN_PIPELINE", "0") == "1"
-workflow_result = workflow.run_workflow(force=RUN_PIPELINE)
-print(json.dumps(workflow_result, indent=2))
+RUN_END_TO_END = os.environ.get("RUN_END_TO_END", "0") == "1"
+yolo_only = run_experiment(
+    output_dir=e2e_dir,
+    mode="yolo-only",
+    max_frames=E2E_SETTINGS["max_frames"],
+    force=RUN_END_TO_END,
+)
+async_roi = run_experiment(
+    output_dir=e2e_dir,
+    mode="async-roi",
+    max_frames=E2E_SETTINGS["max_frames"],
+    interval=E2E_SETTINGS["vlm_interval_frames"],
+    top_k=E2E_SETTINGS["vlm_top_k"],
+    drain_timeout=E2E_SETTINGS["vlm_drain_timeout_seconds"],
+    force=RUN_END_TO_END,
+)
+speed_ledger = comparison(yolo_only, async_roi)
+(e2e_dir / "speed_ledger.json").write_text(
+    json.dumps(speed_ledger, indent=2) + "\n", encoding="utf-8"
+)
+manifest_path = write_manifest(
+    output_dir=e2e_dir,
+    results={"yolo_only": yolo_only, "async_roi": async_roi},
+    settings=E2E_SETTINGS,
+)
+print(json.dumps({
+    "yolo_only_fps": speed_ledger["yolo_only_fps"],
+    "parallel_fps": speed_ledger["parallel_fps"],
+    "fps_retained_percent": speed_ledger["fps_retained_percent"],
+    "manifest": str(manifest_path),
+}, indent=2))
 '''),
-    markdown("e2e-performance-md", r'''
-## 5. Measure asynchronous GPU overlay and direct encode
+    markdown("e2e-video-md", r'''
+## 5. Inspect the final async ROI video
 
-The historical host-overlay/raw-BGR path reached 37.1 FPS and exposed the post-detection bottleneck. The current default removes full-frame D2H and overlaps the GPU overlay/VA-API worker with the next inference. The formal 393-frame workflow reached 74.7 FPS at host load 218.12; an independent repeat reached 71.9 FPS at load 209.15.
+The panel displays the latest completed descriptions. It does not imply identity continuity: this pipeline has no tracker, and a description originates from a prior trigger frame.
+'''),
+    code("e2e-video", r'''
+async_video = Path(async_roi["paths"]["video"])
+print(json.dumps(async_roi["video"], indent=2))
+display(Video(str(async_video), embed=True, html_attributes="controls"))
+'''),
+    markdown("e2e-counters-md", r'''
+## 6. Read actual triggers, skips, completions, and latency
 
-Worker latency and main-thread queue-feed latency are reported separately because the stages overlap. The saved workflow is accepted only when FPS is at least 50, full-frame D2H is zero, and all direct-encode submissions drain.
+Do not estimate VLM calls with `frames // interval`. A trigger also requires detections, and an active batch causes the next trigger to be skipped. The metrics below come from the actual async client.
 '''),
-    code("e2e-performance", r'''
-benchmark_path = env.OUTPUT / "benchmarks/gpu_stages.json"
-gpu_benchmark = json.loads(benchmark_path.read_text())
-manifest = json.loads(workflow.MANIFEST.read_text())
-diagnosis = json.loads((env.OUTPUT / "benchmarks/performance_diagnosis.json").read_text())
-print("GPU-resident detection stages:")
-print(json.dumps(gpu_benchmark["stages"], indent=2))
-print("GPU path:", gpu_benchmark["gpu_path_mean_ms"], "ms /", gpu_benchmark["gpu_path_fps"], "FPS")
-performance = manifest["pipeline"]["performance"]
-print("\nAsync direct annotated-video workflow:")
-print(json.dumps(performance, indent=2))
-print("\nHistorical residency and raw-pipe A/B evidence:")
-print(json.dumps(diagnosis, indent=2))
-assert performance["fps"] >= 50.0
-assert performance["frame_d2h_ms"] == 0.0
-assert performance["direct_encode_feed_ms"] < performance["gpu_overlay_direct_encode_worker_ms"]
-'''),
-    markdown("e2e-timeline-md", "## 6. Qwen3-VL temporal scene timeline"),
-    code("e2e-timeline", r'''
+    code("e2e-counters", r'''
 import pandas as pd
 
-timeline = json.loads(workflow.TIMELINE.read_text())
-segments = pd.DataFrame(timeline["segments"])[
-    ["index", "start", "end", "caption", "latency_seconds"]
-]
-display(segments)
-assert timeline["backend"] == "llamacpp"
-assert "Q8_0.gguf" in timeline["model"]
+parallel_metrics = async_roi["metrics"]
+vlm_metrics = parallel_metrics["vlm"]
+latest = pd.DataFrame(vlm_metrics["latest_descriptions"])
+display(pd.DataFrame([{
+    "frames": parallel_metrics["frames"],
+    "trigger_opportunities": parallel_metrics["trigger_opportunities"],
+    "trigger_with_detections": parallel_metrics["trigger_with_detections"],
+    "submitted_batches": vlm_metrics["submitted_batches"],
+    "skipped_busy": vlm_metrics["skipped_busy"],
+    "submitted_rois": vlm_metrics["submitted_rois"],
+    "completed_rois": vlm_metrics["completed_rois"],
+    "failed_rois": vlm_metrics["failed_rois"],
+    "batch_p50_ms": vlm_metrics["batch_latency_p50_ms"],
+    "batch_p95_ms": vlm_metrics["batch_latency_p95_ms"],
+}]))
+print("Latest completed ROI descriptions:")
+for item in vlm_metrics["latest_descriptions"]:
+    print("-", item["description"])
+assert vlm_metrics["submitted_batches"] == vlm_metrics["completed_batches"]
+assert vlm_metrics["completed_rois"] > 0 and vlm_metrics["failed_rois"] == 0
 '''),
-    markdown("e2e-final-md", "## 7. Play the final scene-aware video"),
-    code("e2e-final", r'''
-final_info = video_info(workflow.FINAL_VIDEO)
-print(final_info)
-final_url = "/files/" + workflow.FINAL_VIDEO.relative_to(env.ROOT).as_posix()
-display(HTML(
-    f'<video controls preload="metadata" style="width:100%;max-width:960px" '
-    f'src="{final_url}"></video>'
-))
-assert final_info["frames"] == source["frames"]
+    markdown("e2e-performance-md", r'''
+## 7. Compare YOLO-only and shared-GPU execution
+
+Async execution removes host-side waiting, not shared-GPU contention. Compare overall video FPS with detector latency while the VLM is idle and active. The separate drain duration is not included in video-pipeline FPS.
 '''),
-    markdown("e2e-compare-md", "## 8. Compare source, YOLO detection, and scene understanding"),
-    code("e2e-compare", r'''
-images = [
-    frame_at(env.SOURCE_VIDEO, 10),
-    frame_at(workflow.YOLO_VIDEO, 10),
-    frame_at(workflow.FINAL_VIDEO, 10),
-]
-show_bgr_grid(
-    images,
-    ["Source", "Ultralytics YOLO26x", "YOLO26x + Qwen3-VL"],
-    size=(21, 6),
-)
+    code("e2e-performance", r'''
+display(pd.DataFrame([
+    {
+        "mode": "YOLO-only",
+        "frames": yolo_only["metrics"]["frames"],
+        "fps": yolo_only["metrics"]["fps"],
+        "detection_mean_ms": yolo_only["metrics"]["detection_mean_ms"],
+        "detection_active_p95_ms": 0.0,
+        "vlm_drain_seconds": 0.0,
+    },
+    {
+        "mode": "YOLO + async ROI VLM",
+        "frames": parallel_metrics["frames"],
+        "fps": parallel_metrics["fps"],
+        "detection_mean_ms": parallel_metrics["detection_mean_ms"],
+        "detection_active_p95_ms": parallel_metrics["detection_vlm_active"]["p95_ms"],
+        "vlm_drain_seconds": parallel_metrics["vlm_drain_seconds"],
+    },
+]))
+print(json.dumps(speed_ledger, indent=2))
+assert parallel_metrics["frames"] == yolo_only["metrics"]["frames"] == 393
+assert parallel_metrics["fps"] >= 25.0
 '''),
-    markdown("e2e-manifest-md", "## 9. Verify the reproducible artifact manifest"),
-    code("e2e-manifest", r'''
-manifest_ready, manifest_detail = workflow.manifest_matches_current()
-manifest = json.loads(workflow.MANIFEST.read_text())
-print("manifest:", manifest_detail)
+    markdown("e2e-audit-md", r'''
+## 8. Verify frame integrity, artifacts, and the copy boundary
+
+The current async VLM path downloads each full decoded frame for CPU overlay and JPEG ROI extraction, then the VA-API writer uploads the annotated frame. This is intentionally different from the YOLO-only `vaapi-direct` production path.
+'''),
+    code("e2e-audit", r'''
+manifest = json.loads(manifest_path.read_text())
+video = async_roi["video"]
 print(json.dumps({
-    "schema_version": manifest["schema_version"],
-    "runtime_identity": manifest["runtime_identity"],
-    "models": manifest["models"],
+    "manifest_status": manifest["status"],
+    "workflow": manifest["workflow"],
+    "settings": manifest["settings"],
+    "video": video,
+    "frame_d2h_mean_ms": parallel_metrics["frame_d2h_mean_ms"],
     "artifacts": manifest["artifacts"],
 }, indent=2))
-assert manifest_ready and manifest["status"] == "PASS"
-assert manifest["schema_version"] == 3
-assert manifest["runtime_identity"]["hip_vaapi_bridge_sha256"]
+assert manifest["status"] == "PASS"
+assert manifest["settings"]["vlm_interval_frames"] == 30
+assert manifest["settings"]["vlm_top_k"] == 3
+assert manifest["settings"]["llama_parallel_slots"] == 3
+assert video["container_samples"] == video["packets"] == video["decoded_frames"] == 393
+assert parallel_metrics["frame_d2h_mean_ms"] > 0
+'''),
+    markdown("e2e-takeaways-md", r'''
+## 9. Takeaways and the open coordination question
+
+1. YOLO and VLM run concurrently in software, but compete for one GPU.
+2. Thirty frames is the trigger period, top-3 is the batch width, and slot 3 is server capacity.
+3. Trigger opportunities, submitted batches, and completed ROIs are different counts.
+4. This path intentionally pays a full-frame host boundary for CPU overlay and JPEG transport.
+5. The descriptions are latest ROI results, not tracked identities.
+
+**Open design question:** How would tracking, event triggers, and before/after evidence replace fixed polling without blocking the frame loop?
 '''),
 ]
 
 NOTEBOOKS = {
     "ultralytics_yolo26x_step_by_step.ipynb": notebook(step_cells),
+    "ultralytics_yolo26x_hands_on.ipynb": notebook(hands_cells),
     "ultralytics_yolo26x_end_to_end.ipynb": notebook(end_cells),
 }
 

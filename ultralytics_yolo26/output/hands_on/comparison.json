@@ -1,0 +1,30 @@
+{
+  "frames": 120,
+  "yolo_only_fps": 48.542,
+  "parallel_fps": 41.349,
+  "fps_retained_percent": 85.2,
+  "yolo_only_detection_ms": 10.884,
+  "parallel_detection_ms": 19.579,
+  "parallel_detection_idle": {
+    "count": 23,
+    "p50_ms": 10.671,
+    "p95_ms": 14.751
+  },
+  "parallel_detection_active": {
+    "count": 97,
+    "p50_ms": 20.733,
+    "p95_ms": 33.942
+  },
+  "trigger_opportunities": 5,
+  "trigger_with_detections": 5,
+  "vlm_submitted_batches": 2,
+  "vlm_skipped_busy": 3,
+  "vlm_submitted_rois": 6,
+  "vlm_completed_batches": 2,
+  "vlm_completed_rois": 6,
+  "vlm_failed_rois": 0,
+  "vlm_batch_latency_p50_ms": 3295.084,
+  "vlm_batch_latency_p95_ms": 4318.651,
+  "vlm_last_latency_ms": 4318.651,
+  "vlm_active": false
+}

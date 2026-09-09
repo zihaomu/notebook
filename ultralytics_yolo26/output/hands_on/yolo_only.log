@@ -1,0 +1,140 @@
+*** CUDA Device Query (Runtime API) version (CUDART static linking) ***
+
+Device count: 1
+
+Device 0: "AMD Radeon PRO W7900D"
+  CUDA Driver Version / Runtime Version          70253.11 / 70253.11
+  CUDA Capability Major/Minor version number:    11.0
+  Total amount of global memory:                 49136 MBytes (51522830336 bytes)
+  GPU Clock Speed:                               1.76 GHz
+  Max Texture Dimension Size (x,y,z)             1D=(16384), 2D=(16384,16384), 3D=(16384,16384,8192)
+  Max Layered Texture Size (dim) x layers        1D=(16384) x 8192, 2D=(16384,16384) x 8192
+  Total amount of constant memory:               2147483647 bytes
+  Total amount of shared memory per block:       65536 bytes
+  Total number of registers available per block: 196608
+  Warp size:                                     32
+  Maximum number of threads per block:           1024
+  Maximum sizes of each dimension of a block:    1024 x 1024 x 1024
+  Maximum sizes of each dimension of a grid:     2147483647 x 65536 x 65536
+  Maximum memory pitch:                          2147483647 bytes
+  Texture alignment:                             256 bytes
+  Concurrent copy and execution:                 Yes with 8 copy engine(s)
+  Run time limit on kernels:                     No
+  Integrated GPU sharing Host Memory:            No
+  Support host page-locked memory mapping:       Yes
+  Concurrent kernel execution:                   Yes
+  Alignment requirement for Surfaces:            Yes
+  Device has ECC support enabled:                No
+  Device is using TCC driver mode:               No
+  Device supports Unified Addressing (UVA):      No
+  Device PCI Bus ID / PCI location ID:           195 / 0
+  Compute Mode:
+      Default (multiple host threads can use ::cudaSetDevice() with device simultaneously)
+
+deviceQuery, CUDA Driver = CUDART, CUDA Driver Version  = 70253.11, CUDA Runtime Version = 70253.11, NumDevs = 1
+
+======================================================================
+  Ultralytics YOLO26x Production Video Pipeline on AMD Radeon
+  Ultralytics ONNX + MIGraphX EP | OpenCV HIP video | no VLM
+======================================================================
+
+[pipeline] AMD GPU via HIP: 1 device(s) available
+[pipeline] Input: /job/source/data/sidewalk.mp4 (1920x1080 @ 25.0fps, 393 frames) | decode: rocdecode
+[pipeline] Output: /tmp/hands-on-run/output/hands_on/yolo_only.mp4 | encode: vaapi
+
+[detector] Loading YOLO26x ONNX through Ultralytics...
+[detector] MIGraphX cache identity: 735f1583e99dfeb733da
+Loading /opt/ultralytics-yolo26/models/yolo26x.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.24.2 with MIGraphXExecutionProvider
+MIGraphX FP16 provider option is enabled; model input remains FP32.
+[detector] Ultralytics ONNX + MIGraphX EP (FP16, GPU I/O binding) ready; output=(1, 300, 6)
+{
+  "owner": "ultralytics.YOLO",
+  "ultralytics_format": "onnx",
+  "provider": "MIGraphXExecutionProvider",
+  "providers": [
+    "MIGraphXExecutionProvider",
+    "CPUExecutionProvider"
+  ],
+  "provider_options": {
+    "migraphx_model_cache_dir": "\"/opt/ultralytics-yolo26/models/ort-migraphx-cache/735f1583e99dfeb733da\"",
+    "device_id": "0",
+    "migraphx_external_alloc": "0",
+    "migraphx_fp8_enable": "0",
+    "migraphx_int8_enable": "0",
+    "migraphx_bf16_enable": "0",
+    "migraphx_mem_limit": "18446744073709551615",
+    "migraphx_int8_calibration_table_name": "",
+    "migraphx_fp16_enable": "1",
+    "migraphx_int8_use_native_calibration_table": "0",
+    "migraphx_arena_extend_strategy": "kNextPowerOfTwo",
+    "migraphx_exhaustive_tune": "0",
+    "migraphx_external_free": "0",
+    "migraphx_external_empty_cache": "0"
+  },
+  "io_binding": true,
+  "migraphx_fp16": true,
+  "cache_dir": "/opt/ultralytics-yolo26/models/ort-migraphx-cache/735f1583e99dfeb733da",
+  "cache_identity": {
+    "schema_version": 1,
+    "onnx_file": "yolo26x.onnx",
+    "onnx_sha256": "88568299de91d4967f239a062c9f1619f695ebd05de73cd66b8f589591aaeb0a",
+    "gpu_arch": "gfx1100",
+    "gpu_name": "AMD Radeon PRO W7900D",
+    "torch": "2.9.1+gitff65f5b",
+    "torch_hip": "7.2.53211-e1a6bc5663",
+    "migraphx": "2.15.0.dev+20250912-17-200-gde19b73ad",
+    "onnxruntime": "1.24.2",
+    "ultralytics": "8.4.75",
+    "ultralytics_commit": "34e213ca3ece4c18962f5bb922ec74da0c474d24",
+    "patch_sha256": "6c43dc90ae70bf61fc3f42634322d6a604a4a55cdc1542e5ea58f00af661c620",
+    "provider": "MIGraphXExecutionProvider",
+    "fp16": true,
+    "input_shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "output_shape": [
+      1,
+      300,
+      6
+    ]
+  },
+  "output_pointer": 131827654197248
+}
+
+[pipeline] Starting pipeline...
+----------------------------------------------------------------------
+  Frame 100/393 | FPS: 54.4 | Dets: 5
+
+======================================================================
+  Pipeline Complete
+  Frames: 120 | Video pipeline: 2.47s | Avg FPS: 48.5
+  Host load average: 1.38, 1.89, 2.63 | logical CPUs: 128
+  Video decode:    rocdecode   |   Video encode: vaapi
+  Avg Preprocess:  0.64ms/frame (GPU/HIP)
+  Avg Detection:   10.88ms/frame (ultralytics-migraphx)
+  Avg Frame D2H:   2.25ms/frame
+  Avg Overlay:     0.51ms/frame
+  Avg Encode feed: 5.34ms/frame
+  Metrics saved to: /tmp/hands-on-run/output/hands_on/yolo_only_metrics.json
+  Output saved to: /tmp/hands-on-run/output/hands_on/yolo_only.mp4
+======================================================================
+Input Video Information
+	Codec        : AVC/H.264
+	Frame rate   : 50/2 = 25 fps
+	Sequence     : Progressive
+	Coded size   : [1920, 1088]
+	Display area : [0, 0, 1920, 1080]
+	Chroma       : YUV 420
+	Bit depth    : 8
+Video Decoding Params:
+	Num Surfaces : 7
+	Crop         : [0, 0, 1920, 1080]
+	Resize       : 1920x1080
+
+[ERR]  {GetWidth}  Display width is 0.
+[ERR]  {GetHeight}  Display height is 0.
+[0;93m2026-09-09 11:27:35.717828728 [W:onnxruntime:Default, migraphx_execution_provider.cc:167 MIGraphXExecutionProvider] [MIGraphX EP] MIGraphX ENV Override Variables Set:[m

@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "workflow": "async-roi-vlm",
+  "settings": {
+    "max_frames": 0,
+    "vlm_interval_frames": 30,
+    "vlm_top_k": 3,
+    "busy_policy": "skip",
+    "transport": "jpeg_http",
+    "llama_parallel_slots": 3,
+    "gpu_placement": "single_gpu",
+    "vlm_drain_timeout_seconds": 20.0
+  },
+  "results": {
+    "yolo_only": {
+      "mode": "yolo-only",
+      "metrics": {
+        "frames": 393,
+        "frame_loop_seconds": 7.543496,
+        "frame_loop_fps": 52.098,
+        "video_pipeline_seconds": 7.769536,
+        "fps": 50.582,
+        "vlm_drain_seconds": 0.0,
+        "total_wall_with_vlm_drain_seconds": 7.769538,
+        "video_decode": "rocdecode",
+        "video_encode": "vaapi",
+        "preprocess_mean_ms": 0.27,
+        "detection_mean_ms": 11.596,
+        "frame_d2h_mean_ms": 2.388,
+        "overlay_mean_ms": 0.417,
+        "encode_feed_mean_ms": 5.906,
+        "trigger_opportunities": 0,
+        "trigger_with_detections": 0,
+        "vlm_interval_frames": null,
+        "vlm_top_k": null,
+        "vlm_drained": null,
+        "vlm": null,
+        "detection_vlm_idle": {
+          "count": 393,
+          "p50_ms": 10.728,
+          "p95_ms": 12.802
+        },
+        "detection_vlm_active": {
+          "count": 0,
+          "p50_ms": 0.0,
+          "p95_ms": 0.0
+        }
+      },
+      "video": {
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "profile": "High",
+        "pixel_format": "yuv420p",
+        "frame_rate": "25/1",
+        "duration_seconds": 15.72,
+        "container_samples": 393,
+        "packets": 393,
+        "decoded_frames": 393
+      },
+      "command": [
+        "/opt/venv/bin/python3",
+        "/job/source/src/pipeline.py",
+        "--input",
+        "/job/source/data/sidewalk.mp4",
+        "--output",
+        "/tmp/e2e-run/output/async_roi_e2e/yolo_only.mp4",
+        "--video-decode",
+        "rocdecode",
+        "--video-encode",
+        "vaapi",
+        "--gpu-direct-encode",
+        "off",
+        "--metrics-json",
+        "/tmp/e2e-run/output/async_roi_e2e/yolo_only_metrics.json",
+        "--no-vlm"
+      ],
+      "paths": {
+        "video": "/tmp/e2e-run/output/async_roi_e2e/yolo_only.mp4",
+        "metrics": "/tmp/e2e-run/output/async_roi_e2e/yolo_only_metrics.json",
+        "log": "/tmp/e2e-run/output/async_roi_e2e/yolo_only.log"
+      },
+      "execution_seconds": 40.911
+    },
+    "async_roi": {
+      "mode": "async-roi",
+      "metrics": {
+        "frames": 393,
+        "frame_loop_seconds": 10.511023,
+        "frame_loop_fps": 37.389,
+        "video_pipeline_seconds": 10.608805,
+        "fps": 37.045,
+        "vlm_drain_seconds": 4.1336,
+        "total_wall_with_vlm_drain_seconds": 14.742408,
+        "video_decode": "rocdecode",
+        "video_encode": "vaapi",
+        "preprocess_mean_ms": 0.505,
+        "detection_mean_ms": 23.676,
+        "frame_d2h_mean_ms": 1.663,
+        "overlay_mean_ms": 1.36,
+        "encode_feed_mean_ms": 0.029,
+        "trigger_opportunities": 14,
+        "trigger_with_detections": 14,
+        "vlm_interval_frames": 30,
+        "vlm_top_k": 3,
+        "vlm_drained": true,
+        "vlm": {
+          "submitted_batches": 3,
+          "skipped_busy": 11,
+          "submitted_rois": 9,
+          "completed_batches": 3,
+          "completed_rois": 9,
+          "failed_rois": 0,
+          "batch_latency_p50_ms": 4819.708,
+          "batch_latency_p95_ms": 5039.556,
+          "last_latency_ms": 4274.78,
+          "active": false,
+          "latest_descriptions": [
+            {
+              "detection": [
+                1.875,
+                2.25,
+                653.25,
+                621.75,
+                0.9462890625,
+                7.0
+              ],
+              "description": "A large white delivery truck with green branding is partially visible, parked or moving in an urban setting with blurred background elements."
+            },
+            {
+              "detection": [
+                1723.5,
+                492.75,
+                1918.5,
+                873.0,
+                0.93359375,
+                10.0
+              ],
+              "description": "A blurry black fire hydrant with a white top stands on a paved street."
+            },
+            {
+              "detection": [
+                720.75,
+                382.5,
+                814.5,
+                564.0,
+                0.9013671875,
+                0.0
+              ],
+              "description": "A blurred figure in dark clothing appears to be walking or running across a light-colored surface."
+            }
+          ]
+        },
+        "detection_vlm_idle": {
+          "count": 33,
+          "p50_ms": 10.813,
+          "p95_ms": 19.954
+        },
+        "detection_vlm_active": {
+          "count": 360,
+          "p50_ms": 24.999,
+          "p95_ms": 39.695
+        }
+      },
+      "video": {
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "profile": "High",
+        "pixel_format": "yuv420p",
+        "frame_rate": "25/1",
+        "duration_seconds": 15.72,
+        "container_samples": 393,
+        "packets": 393,
+        "decoded_frames": 393
+      },
+      "command": [
+        "/opt/venv/bin/python3",
+        "/job/source/src/pipeline.py",
+        "--input",
+        "/job/source/data/sidewalk.mp4",
+        "--output",
+        "/tmp/e2e-run/output/async_roi_e2e/async_roi.mp4",
+        "--video-decode",
+        "rocdecode",
+        "--video-encode",
+        "vaapi",
+        "--gpu-direct-encode",
+        "off",
+        "--metrics-json",
+        "/tmp/e2e-run/output/async_roi_e2e/async_roi_metrics.json",
+        "--vlm-url",
+        "http://yolo26_llama_slot3_validation:8199/v1",
+        "--vlm-interval",
+        "30",
+        "--vlm-top-k",
+        "3",
+        "--vlm-drain-timeout",
+        "20.0"
+      ],
+      "paths": {
+        "video": "/tmp/e2e-run/output/async_roi_e2e/async_roi.mp4",
+        "metrics": "/tmp/e2e-run/output/async_roi_e2e/async_roi_metrics.json",
+        "log": "/tmp/e2e-run/output/async_roi_e2e/async_roi.log"
+      },
+      "execution_seconds": 27.944
+    }
+  },
+  "artifacts": {
+    "async_roi.log": {
+      "bytes": 6729,
+      "sha256": "0fa6ccc5fec576ce2c4b92af4c0ca204b79b7372791b69a05b9579992e7dde28"
+    },
+    "async_roi.mp4": {
+      "bytes": 9102711,
+      "sha256": "a2d07f04ef252fb67e020f07a03973039754329f8ee96361ea249a7e17942132"
+    },
+    "async_roi_metrics.json": {
+      "bytes": 1941,
+      "sha256": "62254c678e3dd032179442adaccc9c1b8655c51856b5e7c816797e2c9aaeabab"
+    },
+    "speed_ledger.json": {
+      "bytes": 1567,
+      "sha256": "7e29c6a2dc0d38ec4c4182b3393aea23bea5a931ce04387404fcbbeb047d4509"
+    },
+    "yolo_only.log": {
+      "bytes": 6074,
+      "sha256": "8c583dace66b52819e0c3cfcd6dcf0f068e0b76f86a89de301fb1df7bf251454"
+    },
+    "yolo_only.mp4": {
+      "bytes": 9069912,
+      "sha256": "4e9f757f52c495794c085cdc75d294f735031f2af8a7a9409c9415c49aa47d4e"
+    },
+    "yolo_only_metrics.json": {
+      "bytes": 753,
+      "sha256": "5482d49d4862a98463ed6831d2712d4abb04703b36aaf6f53cc340f8202b4583"
+    }
+  }
+}

@@ -35,6 +35,10 @@ def main() -> None:
     ).resolve()
     if model_root != Path("/opt/ultralytics-yolo26/models"):
         raise RuntimeError(f"Expected baked model root, got {model_root}")
+    if (workspace / "models").exists() or (workspace / "models").is_symlink():
+        raise RuntimeError(
+            "/workspace/models must be created by each notebook at runtime"
+        )
     if os.environ.get("ULTRALYTICS_WORKSHOP_BUNDLE") != "baked":
         raise RuntimeError("Image does not declare a baked workshop bundle")
     release_id = os.environ.get("ULTRALYTICS_WORKSHOP_RELEASE_ID", "")
@@ -65,6 +69,7 @@ def main() -> None:
         model_root / "ort-migraphx-cache/735f1583e99dfeb733da/identity.json",
         model_root / "ort-migraphx-cache/735f1583e99dfeb733da/20e00-58de11c69ae52cf2-9880cf1608079e0d-36a8840bfe2de0d1.mxr",
         workspace / "ultralytics_yolo26x_step_by_step.ipynb",
+        workspace / "ultralytics_yolo26x_hands_on.ipynb",
         workspace / "ultralytics_yolo26x_end_to_end.ipynb",
         seed_root / "scripts/workshop_bundle_identity.py",
         Path("/usr/local/bin/vaapi-hip-encode-probe"),

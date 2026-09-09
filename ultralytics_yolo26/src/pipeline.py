@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 
 # Ensure the HIP-enabled OpenCV and ROCm installs are found first.
 _opencv_install = os.environ.get("OPENCV_INSTALL", "/opt/opencv5")
@@ -38,6 +39,16 @@ from detector import UltralyticsYOLODetector
 from vlm_client import AsyncVLMClient, validate_llamacpp_service
 from postprocess import draw_detections, draw_scene_panel, draw_stats
 from video_io import make_gpu_writer, make_reader, make_writer
+
+
+def summarize_latencies(values):
+    if not values:
+        return {"count": 0, "p50_ms": 0.0, "p95_ms": 0.0}
+    ordered = sorted(values)
+    midpoint = len(ordered) // 2
+    p50 = ordered[midpoint] if len(ordered) % 2 else (ordered[midpoint - 1] + ordered[midpoint]) / 2
+    p95 = ordered[max(0, int(len(ordered) * 0.95 + 0.999999) - 1)]
+    return {"count": len(ordered), "p50_ms": round(p50, 3), "p95_ms": round(p95, 3)}
 
 
 def check_gpu():
@@ -94,6 +105,18 @@ def parse_args():
         help="Run VLM every N frames (default: 30)",
     )
     parser.add_argument(
+        "--vlm-top-k", type=int, default=config.VLM_TOP_K_ROIS,
+        help="Maximum ROIs per accepted VLM batch (default: 3)",
+    )
+    parser.add_argument(
+        "--vlm-drain-timeout", type=float, default=5.0,
+        help="Seconds to wait for the final async VLM batch (default: 5)",
+    )
+    parser.add_argument(
+        "--metrics-json", default=None,
+        help="Optional path for structured pipeline and VLM metrics",
+    )
+    parser.add_argument(
         "--device", type=int, default=0,
         help="GPU device ID (default: 0)",
     )
@@ -116,6 +139,12 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.vlm_interval < 1:
+        raise ValueError("--vlm-interval must be at least 1")
+    if args.vlm_top_k < 1:
+        raise ValueError("--vlm-top-k must be at least 1")
+    if args.vlm_drain_timeout < 0:
+        raise ValueError("--vlm-drain-timeout cannot be negative")
     config.GPU_DEVICE_ID = args.device
 
     print("=" * 70)
@@ -232,6 +261,10 @@ def main():
     t_frame_download = 0.0
     t_encode = 0.0
     frame_count = 0
+    trigger_opportunities = 0
+    trigger_with_detections = 0
+    detection_ms_vlm_idle = []
+    detection_ms_vlm_active = []
     vlm_descriptions = []  # persist VLM results across frames
 
     t_start = time.time()
@@ -249,6 +282,7 @@ def main():
         frame_count += 1
 
         # --- Stage 1: Preprocessing + Stage 2: Detection ---
+        vlm_active_during_detection = bool(vlm and vlm.is_running)
         t0 = time.time()
         if gpu_decode:
             blob_gpu, scale, pad_w, pad_h = gpu_preprocessor.process(rgb_gpu)
@@ -270,16 +304,27 @@ def main():
                 blob, scale, pad_w, pad_h, frame.shape
             )
         t2 = time.time()
+        detection_ms = (t2 - t1) * 1000
         t_detect += t2 - t1
+        if vlm_active_during_detection:
+            detection_ms_vlm_active.append(detection_ms)
+        else:
+            detection_ms_vlm_idle.append(detection_ms)
 
         if not gpu_direct:
-            if vlm and detections and (
-                frame_count % args.vlm_interval == 0 or frame_count == 1
-            ):
-                if getattr(vlm, "is_gpu_ipc", False) and gpu_decode:
-                    vlm.submit_rois_gpu(rgb_gpu.clone(), detections)
-                else:
-                    vlm.submit_rois(frame.copy(), detections)
+            is_trigger_frame = frame_count % args.vlm_interval == 0 or frame_count == 1
+            if vlm and is_trigger_frame:
+                trigger_opportunities += 1
+                if detections:
+                    trigger_with_detections += 1
+                    if getattr(vlm, "is_gpu_ipc", False) and gpu_decode:
+                        vlm.submit_rois_gpu(
+                            rgb_gpu.clone(), detections, top_k=args.vlm_top_k
+                        )
+                    else:
+                        vlm.submit_rois(
+                            frame.copy(), detections, top_k=args.vlm_top_k
+                        )
             if vlm:
                 vlm_descriptions = vlm.get_latest()
             t3 = time.time()
@@ -337,18 +382,32 @@ def main():
             print(f"  Frame {frame_count}/{total_frames} | FPS: {current_fps:.1f} | Dets: {len(detections)}")
 
     # --- Cleanup ---
+    frame_loop_seconds = time.time() - t_start
     reader.release()
     writer.release()
+    video_pipeline_seconds = time.time() - t_start
+    vlm_drain_started = time.time()
+    vlm_drained = True
+    if vlm:
+        vlm_drained = vlm.wait(timeout=args.vlm_drain_timeout)
+    vlm_drain_seconds = time.time() - vlm_drain_started
+    total_wall_seconds = time.time() - t_start
     direct_writer_info = writer.info() if gpu_direct else None
     if args.display:
         cv2.destroyAllWindows()
 
-    total_time = time.time() - t_start
-
     print()
     print("=" * 70)
     print(f"  Pipeline Complete")
-    print(f"  Frames: {frame_count} | Total: {total_time:.2f}s | Avg FPS: {frame_count/total_time:.1f}")
+    print(
+        f"  Frames: {frame_count} | Video pipeline: {video_pipeline_seconds:.2f}s "
+        f"| Avg FPS: {frame_count/video_pipeline_seconds:.1f}"
+    )
+    if vlm:
+        print(
+            f"  VLM drain:       {vlm_drain_seconds:.2f}s | "
+            f"Total wall with drain: {total_wall_seconds:.2f}s"
+        )
     print(
         "  Host load average: "
         + ", ".join(f"{value:.2f}" for value in os.getloadavg())
@@ -357,9 +416,23 @@ def main():
     print(f"  Video decode:    {dec_kind}   |   Video encode: {enc_kind}")
     print(f"  Avg Preprocess:  {t_preprocess/frame_count*1000:.2f}ms/frame {'(GPU/HIP)' if has_gpu else '(CPU)'}")
     print(f"  Avg Detection:   {t_detect/frame_count*1000:.2f}ms/frame ({detector.backend})")
-    if vlm:
-        vlm_calls = frame_count // args.vlm_interval + 1
-        print(f"  Avg VLM:         {t_vlm/vlm_calls*1000:.0f}ms/call ({vlm.backend_name}, every {args.vlm_interval} frames)")
+    vlm_metrics = vlm.metrics() if vlm else None
+    if vlm_metrics:
+        print(
+            "  VLM batches:      "
+            f"submitted={vlm_metrics['submitted_batches']} | "
+            f"completed={vlm_metrics['completed_batches']} | "
+            f"skipped_busy={vlm_metrics['skipped_busy']} | "
+            f"drained={vlm_drained}"
+        )
+        print(
+            "  VLM ROIs:         "
+            f"submitted={vlm_metrics['submitted_rois']} | "
+            f"completed={vlm_metrics['completed_rois']} | "
+            f"failed={vlm_metrics['failed_rois']} | "
+            f"batch_p50={vlm_metrics['batch_latency_p50_ms']:.1f}ms | "
+            f"batch_p95={vlm_metrics['batch_latency_p95_ms']:.1f}ms"
+        )
     print(f"  Avg Frame D2H:   {t_frame_download/frame_count*1000:.2f}ms/frame")
     if gpu_direct:
         worker_ms = direct_writer_info["worker_seconds"] / frame_count * 1000
@@ -375,6 +448,37 @@ def main():
     else:
         print(f"  Avg Overlay:     {t_postprocess/frame_count*1000:.2f}ms/frame")
         print(f"  Avg Encode feed: {t_encode/frame_count*1000:.2f}ms/frame")
+    metrics = {
+        "frames": frame_count,
+        "frame_loop_seconds": round(frame_loop_seconds, 6),
+        "frame_loop_fps": round(frame_count / frame_loop_seconds, 3),
+        "video_pipeline_seconds": round(video_pipeline_seconds, 6),
+        "fps": round(frame_count / video_pipeline_seconds, 3),
+        "vlm_drain_seconds": round(vlm_drain_seconds, 6),
+        "total_wall_with_vlm_drain_seconds": round(total_wall_seconds, 6),
+        "video_decode": dec_kind,
+        "video_encode": enc_kind,
+        "preprocess_mean_ms": round(t_preprocess / frame_count * 1000, 3),
+        "detection_mean_ms": round(t_detect / frame_count * 1000, 3),
+        "frame_d2h_mean_ms": round(t_frame_download / frame_count * 1000, 3),
+        "overlay_mean_ms": round(t_postprocess / frame_count * 1000, 3),
+        "encode_feed_mean_ms": round(t_encode / frame_count * 1000, 3),
+        "trigger_opportunities": trigger_opportunities,
+        "trigger_with_detections": trigger_with_detections,
+        "vlm_interval_frames": args.vlm_interval if vlm else None,
+        "vlm_top_k": args.vlm_top_k if vlm else None,
+        "vlm_drained": vlm_drained if vlm else None,
+        "vlm": vlm_metrics,
+        "detection_vlm_idle": summarize_latencies(detection_ms_vlm_idle),
+        "detection_vlm_active": summarize_latencies(detection_ms_vlm_active),
+    }
+    if direct_writer_info:
+        metrics["direct_encode"] = direct_writer_info
+    if args.metrics_json:
+        metrics_path = Path(args.metrics_json).expanduser()
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        metrics_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+        print(f"  Metrics saved to: {metrics_path}")
     print(f"  Output saved to: {args.output}")
     print("=" * 70)
 

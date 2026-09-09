@@ -112,6 +112,8 @@ PY
 docker exec "$pipeline_container" sh -lc '
     cd /workspace &&
     python3 scripts/validate_runtime.py --require-models --require-vlm &&
+    python3 tests/test_async_vlm_client.py &&
+    python3 tests/test_async_roi_workflow.py &&
     python3 tests/test_predict_production_parity.py \
         --model /opt/ultralytics-yolo26/models/yolo26x.onnx \
         --video data/sidewalk.mp4 --minimum-iou 0.90 &&

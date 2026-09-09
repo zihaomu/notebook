@@ -30,6 +30,7 @@ LLAMA_GPU="${LLAMA_GPU:-$PIPELINE_GPU}"
 VAAPI_DEVICE="${VAAPI_DEVICE:-/dev/dri/renderD128}"
 ALLOW_LOCAL_BUILD="${ALLOW_LOCAL_BUILD:-0}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-0}"
+LLAMA_RUNTIME_PROFILE="${LLAMA_RUNTIME_PROFILE:-slot3-cache-off-v1}"
 
 development_mode=0
 if [[ -n "$pipeline_override" || -n "$llama_override" || -n "$release_override" ]]; then
@@ -138,9 +139,11 @@ if docker inspect "$LLAMA_CONTAINER" >/dev/null 2>&1; then
     current_llama_env=$(container_environment "$LLAMA_CONTAINER")
     current_model_set_id=$(sed -n 's/^ULTRALYTICS_MODEL_SET_ID=//p' <<<"$current_llama_env")
     current_release_id=$(sed -n 's/^WORKSHOP_RELEASE_ID=//p' <<<"$current_llama_env")
+    current_runtime_profile=$(sed -n 's/^ULTRALYTICS_LLAMA_RUNTIME_PROFILE=//p' <<<"$current_llama_env")
     if [[ "$current_model_name" != "$MODEL_VOLUME" || \
           "$current_model_set_id" != "$model_set_id" || \
           "$current_release_id" != "$WORKSHOP_RELEASE_ID" || \
+          "$current_runtime_profile" != "$LLAMA_RUNTIME_PROFILE" || \
           "$current_llama_image_id" != "$llama_image_id" ]]; then
         docker rm -f "$LLAMA_CONTAINER" >/dev/null
     fi
@@ -172,9 +175,10 @@ else
         -e ROCR_VISIBLE_DEVICES="$LLAMA_GPU" -e HIP_VISIBLE_DEVICES=0 \
         -e WORKSHOP_RELEASE_ID="$WORKSHOP_RELEASE_ID" \
         -e ULTRALYTICS_MODEL_SET_ID="$model_set_id" \
+        -e ULTRALYTICS_LLAMA_RUNTIME_PROFILE="$LLAMA_RUNTIME_PROFILE" \
         -v "$MODEL_VOLUME:/models:ro" \
         "$LLAMA_IMAGE" \
-        sh -lc 'exec /opt/llama.cpp/build/bin/llama-server --model /models/Qwen3-VL-8B-Instruct-Q8_0.gguf --mmproj /models/mmproj-F16.gguf --host 0.0.0.0 --port 8199 --device ROCm0 --n-gpu-layers 99 --ctx-size 12288 --parallel 3 --flash-attn auto --image-min-tokens 1024' >/dev/null
+        sh -lc 'exec /opt/llama.cpp/build/bin/llama-server --model /models/Qwen3-VL-8B-Instruct-Q8_0.gguf --mmproj /models/mmproj-F16.gguf --host 0.0.0.0 --port 8199 --device ROCm0 --n-gpu-layers 99 --ctx-size 12288 --parallel 3 --cache-ram 0 --flash-attn auto --image-min-tokens 1024' >/dev/null
 fi
 
 wait_for_url "llama.cpp health endpoint" "http://127.0.0.1:$LLAMA_PORT/health" "$LLAMA_CONTAINER"

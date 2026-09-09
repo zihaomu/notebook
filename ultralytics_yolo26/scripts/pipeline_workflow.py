@@ -283,6 +283,7 @@ def write_manifest() -> dict[str, object]:
         },
         "notebooks": [
             "ultralytics_yolo26x_step_by_step.ipynb",
+            "ultralytics_yolo26x_hands_on.ipynb",
             "ultralytics_yolo26x_end_to_end.ipynb",
         ],
     }

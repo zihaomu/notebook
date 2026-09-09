@@ -1,0 +1,32 @@
+{
+  "frames": 120,
+  "frame_loop_seconds": 2.242499,
+  "frame_loop_fps": 53.512,
+  "video_pipeline_seconds": 2.472091,
+  "fps": 48.542,
+  "vlm_drain_seconds": 0.0,
+  "total_wall_with_vlm_drain_seconds": 2.472093,
+  "video_decode": "rocdecode",
+  "video_encode": "vaapi",
+  "preprocess_mean_ms": 0.642,
+  "detection_mean_ms": 10.884,
+  "frame_d2h_mean_ms": 2.249,
+  "overlay_mean_ms": 0.509,
+  "encode_feed_mean_ms": 5.341,
+  "trigger_opportunities": 0,
+  "trigger_with_detections": 0,
+  "vlm_interval_frames": null,
+  "vlm_top_k": null,
+  "vlm_drained": null,
+  "vlm": null,
+  "detection_vlm_idle": {
+    "count": 120,
+    "p50_ms": 10.521,
+    "p95_ms": 11.678
+  },
+  "detection_vlm_active": {
+    "count": 0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0
+  }
+}

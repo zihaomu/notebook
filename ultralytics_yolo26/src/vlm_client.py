@@ -269,19 +269,23 @@ def make_vlm_client(backend=None, base_url=None, model_name=None):
 # ---------------------------------------------------------------------------
 
 class AsyncVLMClient:
-    """Non-blocking wrapper around any synchronous VLM client.
+    """Non-blocking, single-batch VLM wrapper with observable busy-skip state."""
 
-    Runs inference in a background thread so the main pipeline loop never
-    stalls. The most recent result is cached and reused across frames until
-    a new VLM call completes.
-    """
-
-    def __init__(self, backend=None, base_url=None, model_name=None):
-        self._sync = make_vlm_client(backend=backend, base_url=base_url, model_name=model_name)
+    def __init__(self, backend=None, base_url=None, model_name=None, sync_client=None):
+        self._sync = sync_client or make_vlm_client(
+            backend=backend, base_url=base_url, model_name=model_name
+        )
         self._lock = threading.Lock()
         self._latest = []
         self._thread = None
         self._last_latency = 0.0
+        self._submitted_batches = 0
+        self._skipped_busy = 0
+        self._submitted_rois = 0
+        self._completed_batches = 0
+        self._completed_rois = 0
+        self._failed_rois = 0
+        self._batch_latencies = []
 
     @property
     def base_url(self):
@@ -293,7 +297,12 @@ class AsyncVLMClient:
 
     @property
     def last_latency(self):
-        return self._last_latency
+        with self._lock:
+            return self._last_latency
+
+    @property
+    def is_running(self):
+        return self._thread is not None and self._thread.is_alive()
 
     def health_check(self):
         return self._sync.health_check()
@@ -302,43 +311,110 @@ class AsyncVLMClient:
     def is_gpu_ipc(self):
         return isinstance(self._sync, LlamaCppIpcVLMClient)
 
+    def _try_start(self, target, payload, detections, top_k):
+        requested = min(len(detections), top_k or config.VLM_TOP_K_ROIS)
+        with self._lock:
+            if self.is_running:
+                self._skipped_busy += 1
+                return False
+            self._submitted_batches += 1
+            self._submitted_rois += requested
+            self._thread = threading.Thread(
+                target=target,
+                args=(*payload, detections, top_k, requested),
+                daemon=True,
+            )
+            self._thread.start()
+        return True
+
     def submit_rois(self, frame, detections, top_k=None):
-        """Fire-and-forget: starts VLM inference in background.
-        Skips if a previous call is still running."""
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._thread = threading.Thread(
-            target=self._run, args=(frame, detections, top_k), daemon=True,
-        )
-        self._thread.start()
+        """Start one CPU/JPEG ROI batch, or return False when one is active."""
+        return self._try_start(self._run, (frame,), detections, top_k)
 
     def submit_rois_gpu(self, rgb_gpu, detections, top_k=None):
-        """GPU zero-copy variant: rgb_gpu is a full-frame CUDA tensor (H,W,3)
-        uint8 RGB. ROIs are cropped and preprocessed on the GPU. The tensor must
-        stay valid for the duration of the async call, so the caller passes a
-        clone (see pipeline)."""
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._thread = threading.Thread(
-            target=self._run_gpu, args=(rgb_gpu, detections, top_k), daemon=True,
+        """Start one GPU-IPC ROI batch, or return False when one is active."""
+        return self._try_start(self._run_gpu, (rgb_gpu,), detections, top_k)
+
+    @staticmethod
+    def _failed_result_count(results):
+        return sum(
+            isinstance(description, str) and description.startswith("[VLM error:")
+            for _, description in results
         )
-        self._thread.start()
 
-    def _run(self, frame, detections, top_k):
-        t0 = time.time()
-        results = self._sync.describe_rois(frame, detections, top_k)
-        self._last_latency = time.time() - t0
+    def _record_completion(self, results, latency, requested, error=None):
         with self._lock:
-            self._latest = results
+            self._last_latency = latency
+            self._batch_latencies.append(latency)
+            self._completed_batches += 1
+            if error is None:
+                self._latest = list(results)
+                failed_responses = self._failed_result_count(results)
+                missing_responses = max(0, requested - len(results))
+                self._completed_rois += len(results) - failed_responses
+                self._failed_rois += failed_responses + missing_responses
+            else:
+                self._failed_rois += requested
 
-    def _run_gpu(self, rgb_gpu, detections, top_k):
-        t0 = time.time()
-        results = self._sync.describe_rois_gpu(rgb_gpu, detections, top_k)
-        self._last_latency = time.time() - t0
+    def _run(self, frame, detections, top_k, requested):
+        started = time.perf_counter()
+        try:
+            results = self._sync.describe_rois(frame, detections, top_k)
+        except Exception as error:
+            self._record_completion([], time.perf_counter() - started, requested, error)
+            return
+        self._record_completion(results, time.perf_counter() - started, requested)
+
+    def _run_gpu(self, rgb_gpu, detections, top_k, requested):
+        started = time.perf_counter()
+        try:
+            results = self._sync.describe_rois_gpu(rgb_gpu, detections, top_k)
+        except Exception as error:
+            self._record_completion([], time.perf_counter() - started, requested, error)
+            return
+        self._record_completion(results, time.perf_counter() - started, requested)
+
+    def wait(self, timeout=None):
+        """Wait for the active batch up to timeout seconds; return completion."""
+        thread = self._thread
+        if thread is None:
+            return True
+        thread.join(timeout=timeout)
+        return not thread.is_alive()
+
+    def metrics(self):
         with self._lock:
-            self._latest = results
+            latencies = sorted(self._batch_latencies)
+            if latencies:
+                midpoint = len(latencies) // 2
+                if len(latencies) % 2:
+                    p50 = latencies[midpoint]
+                else:
+                    p50 = (latencies[midpoint - 1] + latencies[midpoint]) / 2
+                p95 = latencies[max(0, int(len(latencies) * 0.95 + 0.999999) - 1)]
+            else:
+                p50 = p95 = 0.0
+            return {
+                "submitted_batches": self._submitted_batches,
+                "skipped_busy": self._skipped_busy,
+                "submitted_rois": self._submitted_rois,
+                "completed_batches": self._completed_batches,
+                "completed_rois": self._completed_rois,
+                "failed_rois": self._failed_rois,
+                "batch_latency_p50_ms": round(p50 * 1000, 3),
+                "batch_latency_p95_ms": round(p95 * 1000, 3),
+                "last_latency_ms": round(self._last_latency * 1000, 3),
+                "active": self.is_running,
+                "latest_descriptions": [
+                    {
+                        "detection": [float(value) for value in detection],
+                        "description": description,
+                    }
+                    for detection, description in self._latest
+                ],
+            }
 
     def get_latest(self):
-        """Return the most recent VLM results (non-blocking)."""
+        """Return the most recent completed VLM batch without blocking."""
         with self._lock:
             return list(self._latest)
