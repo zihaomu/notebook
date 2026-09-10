@@ -53,7 +53,7 @@ GPU_DEVICE_ID = 0
 # --- llama.cpp / Qwen3-VL Q8_0 ---
 VLM_BACKEND = "llamacpp"
 LLAMACPP_BASE_URL = os.environ.get(
-    "LLAMACPP_BASE_URL", "http://zihao_llamacpp_q8:8199/v1"
+    "LLAMACPP_BASE_URL", "http://127.0.0.1:8199/v1"
 )
 LLAMACPP_MODEL_NAME = "auto"
 LLAMACPP_CONTAINER = os.environ.get("LLAMACPP_CONTAINER", "zihao_llamacpp_q8")

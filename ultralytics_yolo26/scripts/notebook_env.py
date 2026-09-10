@@ -96,7 +96,7 @@ YOLO_ONNX = MODELS / "yolo26x.onnx"
 MIGRAPHX_CACHE = MODELS / "ort-migraphx-cache"
 QWEN_GGUF = MODELS / "Qwen3-VL-8B-Instruct-Q8_0.gguf"
 QWEN_MMPROJ = MODELS / "mmproj-F16.gguf"
-LLAMACPP_ROOT_URL = os.environ.get("LLAMACPP_ROOT_URL", "http://zihao_llamacpp_q8:8199")
+LLAMACPP_ROOT_URL = os.environ.get("LLAMACPP_ROOT_URL", "http://127.0.0.1:8199")
 LLAMACPP_BASE_URL = os.environ.get("LLAMACPP_BASE_URL", f"{LLAMACPP_ROOT_URL}/v1")
 
 

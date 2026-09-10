@@ -8,7 +8,7 @@
 >
 > 目标项目：`ultralytics_yolo26`
 >
-> 与旧方案关系：本方案取代《参会者画像与 End-to-End Workshop 实施方案》中“两场 Workshop”的课程安排；参会者聚合画像仍可作为表达方式参考。
+> 本方案是当前一小时 Workshop 的课程安排。
 >
 > 架构前置：[YOLO26 + VLM 联合运行模式设计](YOLO26_VLM_联合运行模式设计.md)。本文选择具体视频与课堂叙事，联合运行的状态、契约和调度以该文档为准。
 
@@ -792,6 +792,5 @@ YOLO 提供高频视觉事实
 
 - [当前 Step-by-step Notebook](../ultralytics_yolo26x_step_by_step.ipynb)
 - [当前 End-to-end Notebook](../ultralytics_yolo26x_end_to_end.ipynb)
-- [参会者画像与旧实施方案](参会者画像与End-to-End_Workshop实施方案.md)
 - [Workshop 技术改造计划](ultralytics_yolo26_workshop_改造计划.md)
 - [发布与 CI 就绪修正计划](release_readiness_remediation_plan_CN.md)

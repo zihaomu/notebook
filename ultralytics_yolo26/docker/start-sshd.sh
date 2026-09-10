@@ -56,6 +56,10 @@ session_env=(
     "ULTRALYTICS_YOLO26_MODEL_DIR=${ULTRALYTICS_YOLO26_MODEL_DIR:-/opt/ultralytics-yolo26/models}"
     "ULTRALYTICS_YOLO26_OUTPUT_DIR=${ULTRALYTICS_YOLO26_OUTPUT_DIR:-/workspace/output}"
     "ULTRALYTICS_MIGRAPHX_CACHE_ROOT=${ULTRALYTICS_MIGRAPHX_CACHE_ROOT:-/opt/ultralytics-yolo26/models/ort-migraphx-cache}"
+    "LLAMACPP_ROOT_URL=${LLAMACPP_ROOT_URL:-http://127.0.0.1:8199}"
+    "LLAMACPP_BASE_URL=${LLAMACPP_BASE_URL:-http://127.0.0.1:8199/v1}"
+    "NO_PROXY=127.0.0.1,localhost${NO_PROXY:+,$NO_PROXY}"
+    "no_proxy=127.0.0.1,localhost${no_proxy:+,$no_proxy}"
 )
 for variable in ROCR_VISIBLE_DEVICES HIP_VISIBLE_DEVICES VAAPI_DEVICE HF_ENDPOINT; do
     if [[ -n "${!variable:-}" ]]; then

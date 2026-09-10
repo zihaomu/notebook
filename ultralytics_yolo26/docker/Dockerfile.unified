@@ -1,0 +1,61 @@
+ARG BASE_IMAGE=crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work@sha256:ec4984ee98c2d490b14c4389f80acbcdc0f777a1f756c747b1591757ac4eba29
+FROM ${BASE_IMAGE}
+ARG BASE_IMAGE
+ARG UNIFIED_LAYER_SHA256=unknown
+ARG UNIFIED_SOURCE_COMMIT=unknown
+ARG LLAMACPP_BINARY_SHA256=unknown
+ARG LLAMACPP_SOURCE_COMMIT=035cd8f9a6dda9cd0224b07d3df2dc95f7a3a31e
+ARG LLAMACPP_SHORT_COMMIT=035cd8f9a
+ARG LLAMACPP_BUILD_NUMBER=9766
+
+USER root
+
+COPY --from=llamacpp_runtime /llama-server /usr/local/bin/llama-server
+COPY --from=llamacpp_runtime /LLAMA_CPP_LICENSE /usr/share/licenses/llama.cpp/LICENSE
+COPY --from=llamacpp_runtime /LLAMA_CPP_COMMIT /usr/share/llama.cpp/COMMIT
+COPY start-llamacpp.sh /usr/local/bin/start-ultralytics-yolo26-llamacpp
+COPY start-unified-services.sh /usr/local/bin/start-ultralytics-yolo26-services
+COPY start-sshd.sh /usr/local/bin/start-ultralytics-yolo26-sshd
+
+RUN set -eux; \
+    chmod 0755 \
+        /usr/local/bin/llama-server \
+        /usr/local/bin/start-ultralytics-yolo26-llamacpp \
+        /usr/local/bin/start-ultralytics-yolo26-services \
+        /usr/local/bin/start-ultralytics-yolo26-sshd; \
+    test -x /usr/local/bin/start-ultralytics-yolo26-jupyter; \
+    test "$(cat /usr/share/llama.cpp/COMMIT)" = "${LLAMACPP_SOURCE_COMMIT}"; \
+    echo "${LLAMACPP_BINARY_SHA256}  /usr/local/bin/llama-server" | sha256sum -c -; \
+    /usr/local/bin/llama-server --version 2>&1 | grep -F "version: ${LLAMACPP_BUILD_NUMBER} (${LLAMACPP_SHORT_COMMIT})"
+
+LABEL org.opencontainers.image.revision="${UNIFIED_SOURCE_COMMIT}" \
+      org.opencontainers.image.base.name="${BASE_IMAGE}" \
+      io.ultralytics.unified.enabled="true" \
+      io.ultralytics.unified.layer.sha256="${UNIFIED_LAYER_SHA256}" \
+      io.ultralytics.llamacpp.version="b${LLAMACPP_BUILD_NUMBER}" \
+      io.ultralytics.llamacpp.commit="${LLAMACPP_SOURCE_COMMIT}" \
+      io.ultralytics.llamacpp.binary.sha256="${LLAMACPP_BINARY_SHA256}" \
+      io.ultralytics.llamacpp.endpoint="http://127.0.0.1:8199/v1" \
+      io.ultralytics.llamacpp.bind="loopback-only"
+
+ENV SERVICE_MODE=all \
+    LLAMACPP_ROOT_URL=http://127.0.0.1:8199 \
+    LLAMACPP_BASE_URL=http://127.0.0.1:8199/v1 \
+    LLAMACPP_PORT=8199 \
+    LLAMACPP_DEVICE=ROCm0 \
+    LLAMACPP_GPU_LAYERS=99 \
+    LLAMACPP_CTX_SIZE=12288 \
+    LLAMACPP_PARALLEL=3 \
+    LLAMACPP_CACHE_RAM=0 \
+    LLAMACPP_FLASH_ATTN=auto \
+    LLAMACPP_IMAGE_MIN_TOKENS=1024 \
+    LLAMACPP_STARTUP_TIMEOUT=180 \
+    NO_PROXY=127.0.0.1,localhost \
+    no_proxy=127.0.0.1,localhost
+
+EXPOSE 22 8888
+
+USER root
+WORKDIR /app
+
+CMD ["/usr/local/bin/start-ultralytics-yolo26-services"]
