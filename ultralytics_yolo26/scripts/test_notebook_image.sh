@@ -42,4 +42,7 @@ docker run --rm \
     -e VAAPI_DEVICE="$vaapi_device" \
     -e YOLO_CONFIG_DIR=/workspace/output/.ultralytics \
     "$image" \
-    /usr/local/bin/validate-ultralytics-yolo26-image
+    sh -lc '
+        cp -R /opt/ultralytics-yolo26/seed/output/. /workspace/output/ &&
+        exec /usr/local/bin/validate-ultralytics-yolo26-image
+    '
