@@ -126,6 +126,16 @@ def check_release_and_docs() -> str:
     bundle_source = (PACKAGE_ROOT / "scripts/workshop_bundle_identity.py").read_text()
     require('    "release",' not in bundle_source, "bundle must exclude mutable release locks")
     require('    "release/README.md",' in bundle_source, "bundle must include release policy")
+    sshd_dockerfile = (PACKAGE_ROOT / "docker/Dockerfile.sshd").read_text()
+    for token in (
+        "install -d -m 0755 /app",
+        "test -x /bin/bash",
+        "test -x /opt/venv/bin/jupyter",
+        "test -x /opt/venv/bin/jupyter-lab",
+        "EXPOSE 22 8888",
+        "USER root\nWORKDIR /app",
+    ):
+        require(token in sshd_dockerfile, f"SSHD Dockerfile is missing {token}")
     for token in (
         "COPY doc /opt/ultralytics-yolo26/seed/doc",
         "COPY release/README.md /opt/ultralytics-yolo26/seed/release/README.md",

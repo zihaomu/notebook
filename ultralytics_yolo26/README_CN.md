@@ -24,6 +24,29 @@
 
 三本 notebook 均由 [`scripts/build_notebooks.py`](scripts/build_notebooks.py) 确定性生成，在 workshop 镜像中从 clean kernel 执行并保存输出。每本 Notebook 都会在自身当前工作目录创建指向镜像内 immutable model directory 的 `models` 别名，不假设 Notebook 一定位于 `/workspace`。
 
+## 可选 SSH 访问
+
+正式 SSHD 派生镜像基于不可变的 `20260911` 镜像发布：
+
+```bash
+SSHD_IMAGE=crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-20260911-sshd \
+  bash scripts/build_sshd_image.sh
+
+docker run -d --name yolo26-sshd \
+  --device=/dev/kfd --device=/dev/dri --ipc=host \
+  --group-add "$(getent group video | cut -d: -f3)" \
+  --group-add "$(getent group render | cut -d: -f3)" \
+  -p 2222:22 -p 8895:8888 \
+  -v "$HOME/.ssh/id_ed25519.pub:/run/secrets/authorized_keys:ro" \
+  -e SSH_AUTHORIZED_KEYS_FILE=/run/secrets/authorized_keys \
+  -e JUPYTER_TOKEN=ultralytics-yolo26 \
+  crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-20260911-sshd
+
+ssh -p 2222 root@127.0.0.1
+```
+
+派生镜像显式预建可写 `/app`、保留 `/bin/bash`、最终设置 `USER root`，并确保 `jupyter`/`jupyter-lab` 可从标准 `PATH` 执行。默认 `SERVICE_MODE=all` 同时启动 SSHD 和 Jupyter；`jupyter`、`sshd` 可只启动单项服务。推荐公钥认证。只有运行时显式传入 `ROOT_PASSWORD` 才启用密码登录，镜像中不内置任何凭据。
+
 ## 架构与职责
 
 ```text

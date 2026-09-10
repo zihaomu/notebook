@@ -24,6 +24,29 @@ Take an Ultralytics YOLO26x checkpoint beyond `predict()` and into a production-
 
 All three notebooks are generated from [`scripts/build_notebooks.py`](scripts/build_notebooks.py), executed in the workshop image, and saved with outputs. Each notebook creates a `models` alias in its current working directory that points to the immutable model directory exposed by the image; it does not assume the notebook is mounted at `/workspace`.
 
+## Optional SSH access
+
+The formal SSHD-enabled derivative is published from the immutable `20260911` image:
+
+```bash
+SSHD_IMAGE=crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-20260911-sshd \
+  bash scripts/build_sshd_image.sh
+
+docker run -d --name yolo26-sshd \
+  --device=/dev/kfd --device=/dev/dri --ipc=host \
+  --group-add "$(getent group video | cut -d: -f3)" \
+  --group-add "$(getent group render | cut -d: -f3)" \
+  -p 2222:22 -p 8895:8888 \
+  -v "$HOME/.ssh/id_ed25519.pub:/run/secrets/authorized_keys:ro" \
+  -e SSH_AUTHORIZED_KEYS_FILE=/run/secrets/authorized_keys \
+  -e JUPYTER_TOKEN=ultralytics-yolo26 \
+  crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:ultralytics-yolo26-workshop-20260911-sshd
+
+ssh -p 2222 root@127.0.0.1
+```
+
+The derivative explicitly creates writable `/app`, keeps `/bin/bash`, sets the final image user to `root`, and exposes `jupyter`/`jupyter-lab` on the standard `PATH`. `SERVICE_MODE=all` starts SSHD and Jupyter (default); `jupyter` and `sshd` run only one service. Public-key authentication is recommended. Password login is disabled unless `ROOT_PASSWORD` is explicitly supplied at runtime; no credentials are embedded in the image.
+
 ## Architecture
 
 ```text

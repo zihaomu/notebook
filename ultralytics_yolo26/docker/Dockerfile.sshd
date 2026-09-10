@@ -1,0 +1,44 @@
+ARG BASE_IMAGE=crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work@sha256:cdf4c926066cc75bdcf54371b675fc4aeb61283b8315e8a0fe6aae394f37748e
+FROM ${BASE_IMAGE}
+ARG BASE_IMAGE
+ARG SSHD_LAYER_SHA256=unknown
+ARG SSHD_SOURCE_COMMIT=unknown
+
+USER root
+
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        openssh-server; \
+    rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_*
+
+COPY start-sshd.sh /usr/local/bin/start-ultralytics-yolo26-sshd
+COPY start-services.sh /usr/local/bin/start-ultralytics-yolo26-services
+
+RUN chmod 0755 \
+        /usr/local/bin/start-ultralytics-yolo26-sshd \
+        /usr/local/bin/start-ultralytics-yolo26-services; \
+    install -d -m 0755 /app; \
+    test -x /bin/bash; \
+    test -x /opt/venv/bin/jupyter; \
+    test -x /opt/venv/bin/jupyter-lab; \
+    ln -sf /opt/venv/bin/jupyter /usr/local/bin/jupyter; \
+    ln -sf /opt/venv/bin/jupyter-lab /usr/local/bin/jupyter-lab; \
+    command -v /usr/sbin/sshd; \
+    command -v ssh-keygen
+
+LABEL org.opencontainers.image.revision="${SSHD_SOURCE_COMMIT}" \
+      org.opencontainers.image.base.name="${BASE_IMAGE}" \
+      io.ultralytics.sshd.enabled="true" \
+      io.ultralytics.sshd.auth="public-key-or-explicit-root-password" \
+      io.ultralytics.sshd.layer.sha256="${SSHD_LAYER_SHA256}"
+
+ENV SERVICE_MODE=all \
+    SSH_PORT=22
+
+EXPOSE 22 8888
+
+USER root
+WORKDIR /app
+
+CMD ["/usr/local/bin/start-ultralytics-yolo26-services"]
