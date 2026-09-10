@@ -72,6 +72,7 @@ setup_code = r'''
 import importlib
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -144,12 +145,17 @@ def map_baked_models(work_dir: Path, source_dir: Path) -> tuple[Path, str]:
             return source_dir, "existing mapping"
         local_missing = [name for name in required if not (alias / name).is_file()]
         if local_missing:
-            raise RuntimeError(
-                f"Cannot map baked models: {alias} is an existing real path and "
-                f"does not contain the release model set (missing={local_missing}). "
-                "Remove that mount/directory or set ULTRALYTICS_YOLO26_MODEL_DIR "
-                "to a complete model set."
-            )
+            if alias.is_mount():
+                raise RuntimeError(
+                    f"Cannot replace mounted models directory: {alias}. "
+                    "Remove the mount or mount the complete release model set."
+                )
+            if alias.is_dir():
+                shutil.rmtree(alias)
+            else:
+                alias.unlink()
+            alias.symlink_to(source_dir, target_is_directory=True)
+            return alias.resolve(), "replaced incomplete directory with symlink"
         return alias.resolve(), "existing model directory"
 
     try:
