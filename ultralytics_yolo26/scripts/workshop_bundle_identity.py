@@ -15,18 +15,21 @@ ROOT_FILES = (
     "ultralytics_yolo26x_step_by_step.ipynb",
     "ultralytics_yolo26x_hands_on.ipynb",
     "ultralytics_yolo26x_end_to_end.ipynb",
+    "data/sidewalk.mp4",
     "output/.gitkeep",
+    "output/hands_on/custom_prompt_video.mp4",
+    "output/hands_on/custom_timeline.json",
+    "output/hands_on/prompt_comparison.json",
+    "output/hands_on/submission.json",
     "release/README.md",
 )
 ROOT_DIRECTORIES = (
     "assets",
-    "data",
     "docker",
     "native",
     "doc",
     "output/benchmarks",
     "output/pipeline",
-    "output/hands_on",
     "output/async_roi_e2e",
     "scripts",
     "src",
@@ -46,7 +49,7 @@ def bundle_files(root: Path) -> list[Path]:
             continue
         if "__pycache__" in relative.parts or path.suffix in {".pyc", ".pyo"}:
             continue
-        if relative.parts[:2] == ("native", "build"):
+        if relative.parts[:2] in {("native", "build"), ("doc", "slide")}:
             continue
         result.append(path)
     return sorted(set(result), key=lambda path: path.relative_to(root).as_posix())

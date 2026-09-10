@@ -9,6 +9,7 @@
 !data/sidewalk.mp4
 !doc/
 !doc/**
+doc/slide/
 !docker/
 !docker/**
 !models/
@@ -31,7 +32,11 @@ output/*
 !output/benchmarks/
 !output/benchmarks/**
 !output/hands_on/
-!output/hands_on/**
+output/hands_on/*
+!output/hands_on/custom_prompt_video.mp4
+!output/hands_on/custom_timeline.json
+!output/hands_on/prompt_comparison.json
+!output/hands_on/submission.json
 !output/async_roi_e2e/
 !output/async_roi_e2e/**
 !output/pipeline/

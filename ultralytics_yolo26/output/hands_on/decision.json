@@ -1,8 +1,0 @@
-{
-  "vlm_interval_frames": 30,
-  "vlm_top_k": 3,
-  "busy_policy": "skip",
-  "transport": "jpeg_http",
-  "gpu_placement": "single_gpu",
-  "max_frames": 120
-}

@@ -1445,9 +1445,252 @@ assert parallel_metrics["frame_d2h_mean_ms"] > 0
 '''),
 ]
 
+
+def replace_cell_source(cells, cell_id, source_text):
+    result = []
+    for cell in cells:
+        copied = dict(cell)
+        copied["metadata"] = dict(cell["metadata"])
+        if copied["metadata"]["id"] == cell_id:
+            copied["source"] = lines(source_text)
+        result.append(copied)
+    return result
+
+
+step_v2_cells = step_cells
+step_v2_markdown = {
+    'step-title': '# YOLO26x Step by Step: Follow One Frame\n\n**Question:** a warm model call is fast. Why can a video pipeline still be slow?\n\n```text\ncorrect model -> deployment engine -> frame boundaries -> resident path\n-> parity -> stage A/B -> VLM side path -> production proof\n```\n\nEach step answers one question with one artifact. Detailed logs stay in `output/step_by_step/logs/`.\n',
+    'step-setup-md': '## 1. Lock the experiment\n\n**Question:** are model, GPU, provider, video, and cache fixed?\n\n**Evidence:** verified assets plus three source frames.  \n**Next:** establish a familiar PyTorch result.\n',
+    'step-export-md': '## 2. Establish the model contract\n\n**Question:** what must deployment preserve?\n\n**Evidence:** PyTorch detections and static ONNX: `1x3x640x640 -> 1x300x6`.  \n**Next:** separate first-run cost from steady-state cost.\n',
+    'step-predict-md': '## 3. Separate cold start from warm inference\n\n**Question:** what does MIGraphX pay once, and what repeats every frame?\n\n**Evidence:** first predict versus warm P50/P95, with PT/ONNX visual parity.  \n**Next:** model latency is not video latency; follow one frame outside the model.\n',
+    'step-transfer-md': '## 4. Follow one frame across host and GPU\n\n**Question:** where does a frame cross device boundaries?\n\n```text\nCPU round-trip: GPU decode -> full-frame D2H -> CPU overlay -> upload -> GPU encode\nGPU direct:     GPU decode -> preprocess -> infer/NMS -> overlay/NV12 -> encode\n```\n\n**Evidence:** bytes, direction, synchronized P50/P95, and 25 FPS traffic.  \n**Next:** remove repeated crossings instead of only tuning DMA.\n',
+    'step-resident-md': '## 5. Keep the frame resident\n\n**Question:** can decode, preprocess, inference, and NMS reuse GPU buffers?\n\n**Evidence:** GPU tensors, detections, stable pointers, inference P50/P95.  \n**Next:** prove the result did not change.\n',
+    'step-parity-md': '## 6. Gate optimization with correctness\n\n**Question:** did the new data path change detections?\n\n**Pass:** same box count/classes and class-matched IoU >= 0.90.  \n**Next:** measure the resident stages.\n',
+    'step-benchmark-md': '## 7. Measure the resident stages\n\n**Question:** after copies are removed, where is GPU time spent?\n\n**Evidence:** rocDecode, HIP preprocess, MIGraphX, GPU NMS; mean and P95.  \n**Next:** compare complete host round-trip and GPU-direct boundaries.\n',
+    'step-optimization-md': '## 8. Prove the boundary change end to end\n\n**Question:** does deleting the host round-trip improve the real video path?\n\n**Controlled A/B:** same video, model, 120 frames, rocDecode, and VA-API.\n\n- CPU round-trip: full-frame D2H + CPU overlay + upload;\n- GPU direct: resident overlay/NV12 + direct VA-API.\n\n**Next:** keep vision stable, then add VLM as a separate low-frequency path.\n',
+    'step-vlm-md': '## 9. Keep VLM off the per-frame critical path\n\n**Question:** what does the semantic stage receive and return?\n\n**Evidence:** three-frame storyboard, one caption, one separately timed request.  \n**Rule:** do not fold VLM latency into detector FPS.\n',
+    'step-video-md': '## 10. Validate production artifacts\n\n**Question:** did the optimized design survive the complete workflow?\n\n**Evidence:** YOLO and YOLO+VLM videos, 393/393 frames, zero full-frame D2H on the direct path.\n',
+    'step-audit-md': '## 11. Final boundary audit\n\n```text\nH.264 -> rocDecode -> HIP preprocess -> MIGraphX -> GPU NMS\n      -> compact detections D2H\n      -> HIP overlay/RGB-to-NV12 -> direct VA-API\n```\n\n- No full-frame D2H in the YOLO direct path.\n- Compact detection metadata still crosses to host.\n- Notebook images, JPEG/HTTP VLM input, and subtitle rendering are explicit host boundaries.\n\n**Method:** locate, measure, remove, verify parity, remeasure end to end.\n',
+}
+for cell_id, markdown_text in step_v2_markdown.items():
+    step_v2_cells = replace_cell_source(step_v2_cells, cell_id, markdown_text)
+step_v2_setup = ''.join(next(cell['source'] for cell in step_v2_cells if cell['metadata']['id'] == 'step-setup'))
+step_v2_setup = step_v2_setup.replace(
+    'os.environ["ULTRALYTICS_YOLO26_OUTPUT_DIR"] = str(OUTPUT_DIR)\n',
+    'os.environ["ULTRALYTICS_YOLO26_OUTPUT_DIR"] = str(OUTPUT_DIR)\n'
+    'os.environ["ULTRALYTICS_YOLO26_PIPELINE_DIR"] = str(\n'
+    '    NOTEBOOK_DIR / "output" / "pipeline"\n'
+    ')\n',
+)
+step_v2_cells = replace_cell_source(step_v2_cells, 'step-setup', step_v2_setup)
+step_v2_cells = replace_cell_source(step_v2_cells, 'step-transfer', 'import pandas as pd\n\n\ndef percentile(values, fraction):\n    ordered = sorted(values)\n    return ordered[math.ceil(len(ordered) * fraction) - 1]\n\n\ndef measure_transfer(operation, payload_bytes, repeats=50, warmup=5):\n    for _ in range(warmup):\n        operation()\n        torch.cuda.synchronize()\n    samples_ms = []\n    for _ in range(repeats):\n        torch.cuda.synchronize()\n        started = time.perf_counter()\n        operation()\n        torch.cuda.synchronize()\n        samples_ms.append((time.perf_counter() - started) * 1000)\n    p50_ms = statistics.median(samples_ms)\n    return {\n        "p50_ms": round(p50_ms, 4),\n        "p95_ms": round(percentile(samples_ms, 0.95), 4),\n        "effective_GBps": round(payload_bytes / (p50_ms * 1_000_000), 3),\n    }\n\n\ntransfer_cases = [\n    ("1080p RGB frame", (1080, 1920, 3), torch.uint8),\n    ("640x640 model input", (1, 3, 640, 640), torch.float32),\n    ("300x6 compact output", (1, 300, 6), torch.float32),\n]\ntransfer_results = []\nfor payload_name, shape, dtype in transfer_cases:\n    pageable_source = torch.empty(shape, dtype=dtype, device="cpu")\n    pinned_source = torch.empty(shape, dtype=dtype, device="cpu", pin_memory=True)\n    gpu_buffer = torch.empty(shape, dtype=dtype, device="cuda:0")\n    pageable_destination = torch.empty(shape, dtype=dtype, device="cpu")\n    pinned_destination = torch.empty(shape, dtype=dtype, device="cpu", pin_memory=True)\n    payload_bytes = gpu_buffer.numel() * gpu_buffer.element_size()\n    operations = [\n        ("H2D", "pageable", lambda: gpu_buffer.copy_(pageable_source, non_blocking=False)),\n        ("H2D", "pinned", lambda: gpu_buffer.copy_(pinned_source, non_blocking=True)),\n        ("D2H", "pageable", lambda: pageable_destination.copy_(gpu_buffer, non_blocking=False)),\n        ("D2H", "pinned", lambda: pinned_destination.copy_(gpu_buffer, non_blocking=True)),\n    ]\n    for direction, host_memory, operation in operations:\n        transfer_results.append({\n            "payload": payload_name,\n            "direction": direction,\n            "host_memory": host_memory,\n            "payload_MiB": round(payload_bytes / 1024**2, 3),\n            **measure_transfer(operation, payload_bytes),\n        })\n\ntransfer_table = pd.DataFrame(transfer_results)\nfull_frame_mib = 1080 * 1920 * 3 / 1024**2\ntraffic = pd.DataFrame([\n    {"path": "one full-frame direction", "MiB/frame": full_frame_mib, "MiB/s at 25 FPS": full_frame_mib * 25},\n    {"path": "D2H + upload round-trip", "MiB/frame": full_frame_mib * 2, "MiB/s at 25 FPS": full_frame_mib * 50},\n    {"path": "300x6 compact output", "MiB/frame": 300 * 6 * 4 / 1024**2, "MiB/s at 25 FPS": 300 * 6 * 4 / 1024**2 * 25},\n])\n\nfigure, axes = plt.subplots(1, 2, figsize=(14, 4.5))\nfor axis, direction in zip(axes, ("H2D", "D2H")):\n    subset = transfer_table[transfer_table["direction"] == direction]\n    for memory, color in (("pageable", "#d97706"), ("pinned", "#007c91")):\n        values = subset[subset["host_memory"] == memory]\n        offset = -0.18 if memory == "pageable" else 0.18\n        axis.bar([index + offset for index in range(len(values))], values["p50_ms"], width=0.34, label=memory, color=color)\n    axis.set_xticks(range(len(values)), values["payload"], rotation=18, ha="right")\n    axis.set_yscale("log")\n    axis.set_ylabel("P50 copy latency (ms, log scale)")\n    axis.set_title(direction)\n    axis.grid(axis="y", alpha=0.25)\n    axis.legend()\nfigure.tight_layout()\nplt.show()\ndisplay(traffic.round(3))\ndisplay(Markdown(\n    "**Interpretation:** one DMA is small. The expensive design is a repeated "\n    "full-frame round-trip that adds synchronization, CPU work, and another upload."\n))\n')
+step_v2_cells = replace_cell_source(step_v2_cells, 'step-optimization', 'import subprocess\n\nfrom scripts.async_roi_workflow import run_experiment\nfrom scripts import pipeline_workflow as workflow\nworkflow = importlib.reload(workflow)\n\nAB_FRAMES = int(os.environ.get("STEP_V2_AB_FRAMES", "120"))\nRUN_BOUNDARY_AB = os.environ.get("RUN_BOUNDARY_AB", "0") == "1"\nab_dir = env.OUTPUT / "boundary_ab"\nab_dir.mkdir(parents=True, exist_ok=True)\n\ncpu_roundtrip = run_experiment(\n    output_dir=ab_dir,\n    mode="yolo-only",\n    max_frames=AB_FRAMES,\n    force=RUN_BOUNDARY_AB,\n)\n\ndirect_video = ab_dir / "gpu_direct.mp4"\ndirect_metrics_path = ab_dir / "gpu_direct_metrics.json"\ndirect_log = ab_dir / "gpu_direct.log"\ndirect_command = workflow.pipeline_command(\n    source=env.SOURCE_VIDEO,\n    output=direct_video,\n    max_frames=AB_FRAMES,\n)\ndirect_command.extend(["--metrics-json", str(direct_metrics_path)])\nif RUN_BOUNDARY_AB or not all(path.is_file() for path in (direct_video, direct_metrics_path, direct_log)):\n    process = subprocess.run(\n        direct_command,\n        cwd=env.ROOT,\n        env=os.environ.copy(),\n        capture_output=True,\n        text=True,\n    )\n    direct_log.write_text(process.stdout + process.stderr, encoding="utf-8")\n    if process.returncode:\n        raise RuntimeError(f"GPU-direct run failed; see {direct_log}")\nelse:\n    print(f"GPU-direct boundary run: reused {direct_metrics_path}")\n\ndirect_metrics = json.loads(direct_metrics_path.read_text())\ndirect_video_info = workflow.video_info(direct_video)\nfor key in ("container_samples", "packets", "decoded_frames"):\n    assert direct_video_info[key] == AB_FRAMES, (key, direct_video_info[key])\nassert cpu_roundtrip["metrics"]["frames"] == direct_metrics["frames"] == AB_FRAMES\nassert cpu_roundtrip["metrics"]["frame_d2h_mean_ms"] > 0\nassert direct_metrics["frame_d2h_mean_ms"] == 0\n\nboundary_ab = pd.DataFrame([\n    {\n        "path": "CPU round-trip",\n        "fps": cpu_roundtrip["metrics"]["fps"],\n        "full_frame_d2h_ms": cpu_roundtrip["metrics"]["frame_d2h_mean_ms"],\n        "overlay_ms": cpu_roundtrip["metrics"]["overlay_mean_ms"],\n        "encode_feed_ms": cpu_roundtrip["metrics"]["encode_feed_mean_ms"],\n    },\n    {\n        "path": "GPU direct",\n        "fps": direct_metrics["fps"],\n        "full_frame_d2h_ms": direct_metrics["frame_d2h_mean_ms"],\n        "overlay_ms": direct_metrics["overlay_mean_ms"],\n        "encode_feed_ms": direct_metrics["encode_feed_mean_ms"],\n    },\n])\nfigure, axes = plt.subplots(1, 2, figsize=(12, 4.2))\naxes[0].bar(boundary_ab["path"], boundary_ab["fps"], color=["#d97706", "#007c91"])\naxes[0].set_ylabel("Video pipeline FPS")\naxes[0].set_title("Same 120 frames, different boundary")\naxes[0].grid(axis="y", alpha=0.25)\naxes[1].bar(boundary_ab["path"], boundary_ab["full_frame_d2h_ms"], color=["#d97706", "#007c91"])\naxes[1].set_ylabel("Full-frame D2H (ms/frame)")\naxes[1].set_title("Delete the round-trip, not just the DMA")\naxes[1].grid(axis="y", alpha=0.25)\nfigure.tight_layout()\nplt.show()\ndisplay(boundary_ab.round(3))\ndisplay(Markdown(\n    f"**Result:** GPU direct is `{direct_metrics[\'fps\'] / cpu_roundtrip[\'metrics\'][\'fps\']:.2f}x` "\n    "the CPU round-trip throughput, with zero full-frame D2H."\n))\n')
+step_v2_cells = [
+    {
+        **cell,
+        'id': cell['id'].replace('step-', 'step-v2-', 1),
+        'metadata': {
+            **cell['metadata'],
+            'id': cell['metadata']['id'].replace('step-', 'step-v2-', 1),
+        },
+    }
+    for cell in step_v2_cells
+]
+
+def hidden_code(cell_id, text):
+    cell = code(cell_id, text)
+    cell["metadata"]["jupyter"] = {"source_hidden": True}
+    cell["metadata"]["tags"] = ["hide-input"]
+    return cell
+
+
+hands_v2_setup = setup_code.replace(
+    'OUTPUT_DIR = NOTEBOOK_DIR / "output"',
+    'OUTPUT_DIR = NOTEBOOK_DIR / "output" / "hands_on"',
+).replace(
+    'os.environ["ULTRALYTICS_YOLO26_OUTPUT_DIR"] = str(OUTPUT_DIR)\n',
+    'os.environ["ULTRALYTICS_YOLO26_OUTPUT_DIR"] = str(OUTPUT_DIR)\n'
+    'os.environ["ULTRALYTICS_YOLO26_PIPELINE_DIR"] = str(\n'
+    '    NOTEBOOK_DIR / "output" / "pipeline"\n'
+    ')\n',
+).replace(
+    'from scripts.model_setup import ensure_models, model_status\nfrom scripts.notebook_helpers import frame_at, show_bgr, show_bgr_grid, video_info',
+    'from IPython.display import Markdown, display\nimport cv2\nimport pandas as pd\nimport matplotlib.pyplot as plt\nfrom scripts.model_setup import ensure_models, model_status, wait_for_llamacpp\nfrom scripts.notebook_helpers import capture_log, frame_at, show_bgr, show_bgr_grid, show_video, video_info',
+).replace(
+    'models = ensure_models(env.MODELS, progress=True)\nruntime = validate(require_models=True, require_vlm=False)\nprint(json.dumps({\n    "notebook_dir": str(NOTEBOOK_DIR),\n    "source_root": str(ROOT),\n    "model_source": str(BAKED_MODELS),\n    "model_alias": str(NOTEBOOK_DIR / "models"),\n    "model_mapping": MODEL_MAPPING,\n    "model_delivery": delivery_mode,\n    **runtime,\n}, indent=2))\nmodels',
+    'from scripts.hands_on_prompt_lab import DEFAULT_QUESTION, PromptLab, compose_prompt\nwith capture_log(env.OUTPUT / "logs/environment.log", "Environment validation"):\n    models = ensure_models(env.MODELS, progress=True)\n    runtime = validate(require_models=True, require_vlm=True)\n    wait_for_llamacpp(timeout=60, progress=False)\n    lab = PromptLab.prepare(output_dir=env.OUTPUT)\ndisplay(Markdown(\n    f"**Ready:** YOLO runs every frame; VLM answers at selected evidence windows. "\n    f"GPU `{runtime[\'torch_gpu\']}`; output `{env.OUTPUT}`."\n))',
+)
+
+hands_v2_cells = [
+    markdown("hands-v2-title", r'''
+# YOLO + VLM Hands-on: Same Video, Different Questions
+
+Change **one line**. Keep the video and visual evidence fixed. Observe how a new question changes the VLM answer.
+
+```text
+YOLO every frame -> Coordinator selects evidence -> VLM answers your question
+```
+'''),
+    markdown("hands-v2-model-md", r'''
+## 1. Two clocks, one coordinator
+
+| Layer | Rhythm | Controls |
+|---|---|---|
+| YOLO | every frame | visible objects and positions |
+| Coordinator | selected moments | trigger and evidence |
+| VLM | on demand | interpretation of that evidence |
+
+You control the **question**. The application owns model loading, HTTP, timing, and rendering.
+'''),
+    hidden_code("hands-v2-setup", hands_v2_setup),
+    markdown("hands-v2-evidence-md", r'''
+## 2. Freeze the evidence
+
+The next comparison keeps the YOLO frame, three-frame storyboard, and evidence hash identical.
+
+Before running: what is visible, and what remains uncertain?
+'''),
+    hidden_code("hands-v2-evidence", r'''
+evidence = lab.evidence(0)
+yolo_frame = frame_at(lab.yolo_video, evidence["sample_times"][1])
+storyboard = cv2.imread(evidence["storyboard"])
+assert storyboard is not None
+show_bgr_grid(
+    [yolo_frame, storyboard],
+    ["YOLO: objects every frame", "VLM: three frames from one trigger"],
+    columns=1,
+    size=(15, 12),
+)
+figure, axis = plt.subplots(figsize=(12, 2.4))
+axis.scatter(range(16), [1] * 16, color="#007c91", s=34, label="YOLO: every frame")
+trigger_seconds = [0, 4, 8, 12]
+axis.scatter(trigger_seconds, [0] * 4, color="#d97706", marker="^", s=100, label="VLM trigger")
+axis.set_yticks([0, 1], ["VLM", "YOLO"])
+axis.set_xlabel("Video time (seconds)")
+axis.set_title("Two clocks: fast detection, slower semantic questions")
+axis.legend(loc="upper right")
+axis.grid(axis="x", alpha=0.2)
+figure.tight_layout()
+plt.show()
+display(Markdown(
+    f"**Trigger window:** `{evidence['start']:.1f}-{evidence['end']:.1f} s`  \n"
+    f"**Evidence SHA:** `{evidence['sha256'][:16]}...`"
+))
+'''),
+    markdown("hands-v2-card-md", r'''
+## 3. Your Prompt Card
+
+The system keeps role, length, and grounding rules fixed. Change only the question.
+
+Examples:
+
+- `What is happening in this scene?`
+- `What road-safety risks are visible?`
+- `Describe this scene for someone who cannot see it.`
+'''),
+    code("hands-v2-question", r'''
+# EDIT ONLY THIS LINE
+MY_QUESTION = "What road-safety risks are visible?"
+
+display(Markdown(f"### Your question\n\n> {MY_QUESTION}"))
+'''),
+    markdown("hands-v2-predict-md", r'''
+## 4. Predict before running
+
+The evidence will not change. Which visible facts should your question emphasize?
+'''),
+    hidden_code("hands-v2-compare", r'''
+with capture_log(env.OUTPUT / "logs/prompt_compare.log", "Prompt comparison"):
+    comparison = lab.compare(MY_QUESTION)
+assert comparison["evidence"]["sha256"] == evidence["sha256"]
+display(Markdown(
+    f"### Default question\n> {comparison['default']['question']}\n\n"
+    f"**Answer:** {comparison['default']['answer']}\n\n"
+    f"### Your question\n> {comparison['custom']['question']}\n\n"
+    f"**Answer:** {comparison['custom']['answer']}\n\n"
+    f"**Same evidence SHA:** `{comparison['evidence']['sha256'][:16]}...`"
+))
+'''),
+    markdown("hands-v2-explain-md", r'''
+## 5. Why did the answer change?
+
+- Same evidence, different prompt -> different **focus**.
+- Prompt controls the question and answer format.
+- Prompt cannot add objects or events that are not visible.
+
+Check relevance, visible grounding, and the one-sentence format.
+'''),
+    hidden_code("hands-v2-timeline", r'''
+with capture_log(env.OUTPUT / "logs/custom_timeline.log", "Four-trigger timeline"):
+    custom_timeline = lab.run_timeline(
+        MY_QUESTION,
+        comparison=comparison,
+        force=os.environ.get("RUN_CUSTOM_TIMELINE", "0") == "1",
+    )
+timeline_rows = [
+    {
+        "trigger": f"{segment['start']:.1f}-{segment['end']:.1f} s",
+        "evidence": segment["evidence_sha256"][:12],
+        "answer": segment["caption"],
+    }
+    for segment in custom_timeline["segments"]
+]
+display(pd.DataFrame(timeline_rows))
+'''),
+    markdown("hands-v2-video-md", r'''
+## 6. Same YOLO video, different semantic view
+
+YOLO boxes stay fixed. Trigger selects the four evidence windows; your question changes the semantic timeline.
+'''),
+    hidden_code("hands-v2-videos", r'''
+videos = lab.video_paths()
+show_video(videos["baseline"], "Baseline: general scene summary")
+show_video(videos["custom"], f"Custom: {MY_QUESTION}")
+assert video_info(videos["baseline"])["frames"] == 393
+assert video_info(videos["custom"])["frames"] == 393
+'''),
+    markdown("hands-v2-boundary-md", r'''
+## 7. What you control
+
+| Control | Meaning |
+|---|---|
+| Prompt | what the VLM focuses on |
+| Trigger | when the coordinator asks |
+| Evidence | which frames the VLM receives |
+| YOLO boxes | fixed model facts in this exercise |
+
+A prompt changes interpretation, not the underlying video.
+'''),
+    hidden_code("hands-v2-save", r'''
+conclusion = "The question changed the focus while the visual evidence and YOLO detections stayed fixed."
+submission_path = lab.save_submission(
+    MY_QUESTION,
+    comparison,
+    custom_timeline,
+    conclusion,
+)
+submission = json.loads(submission_path.read_text())
+display(Markdown(
+    f"**Saved:** `{submission_path}`  \n"
+    f"**Focus changed:** `{submission['automatic_checks']['focus_changed']}`  \n"
+    f"**Within 20 words:** `{submission['automatic_checks']['format_within_20_words']}`"
+))
+'''),
+    markdown("hands-v2-takeaways-md", r'''
+## 8. Takeaways
+
+1. **YOLO sees objects every frame.**
+2. **The coordinator decides when and what evidence reaches VLM.**
+3. **Your prompt decides what the VLM focuses on.**
+
+You write the question; the application owns the complex model and pipeline work.
+'''),
+]
+
+
 NOTEBOOKS = {
-    "ultralytics_yolo26x_step_by_step.ipynb": notebook(step_cells),
-    "ultralytics_yolo26x_hands_on.ipynb": notebook(hands_cells),
+    "ultralytics_yolo26x_step_by_step.ipynb": notebook(step_v2_cells),
+    "ultralytics_yolo26x_hands_on.ipynb": notebook(hands_v2_cells),
     "ultralytics_yolo26x_end_to_end.ipynb": notebook(end_cells),
 }
 

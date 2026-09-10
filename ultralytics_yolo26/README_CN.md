@@ -12,15 +12,15 @@
 
 ## 三本 Notebook
 
-1. [`ultralytics_yolo26x_step_by_step.ipynb`](ultralytics_yolo26x_step_by_step.ipynb)
-   - 将 YOLO26x checkpoint 导出为静态 ONNX，并通过 Ultralytics MIGraphX 后端运行。
-   - 测量首次编译、warm inference、H2D/D2H、GPU 常驻 buffer、parity 和分阶段 latency。
-2. [`ultralytics_yolo26x_hands_on.ipynb`](ultralytics_yolo26x_hands_on.ipynb)
-   - 让参与者选择一个可执行的 interval/top-K/GPU 布局变量，并比较 YOLO-only、VLM-only 和异步 ROI 运行。
-   - 输出包含 Trigger、Evidence、Output、Backpressure、Failure 和 Metrics 的结构化联动答卷。
+1. [`ultralytics_yolo26x_step_by_step.ipynb`](ultralytics_yolo26x_step_by_step.ipynb) **（推荐起点）**
+   - 沿一帧数据解释 PT/ONNX、Host/GPU 边界、GPU 常驻、parity、VLM 和 production proof。
+   - 120 帧受控 A/B 实测：CPU round-trip 为 **48.209 FPS / 2.774 ms 整帧 D2H**，GPU direct 为 **97.959 FPS / 0 ms D2H**。
+2. [`ultralytics_yolo26x_hands_on.ipynb`](ultralytics_yolo26x_hands_on.ipynb) **（推荐练习）**
+   - 参与者只修改一个自然语言问题，并在完全相同的视觉证据上比较 VLM 答案。
+   - YOLO 每帧运行，Coordinator 选择四个 evidence window，VLM 按需回答。
 3. [`ultralytics_yolo26x_end_to_end.ipynb`](ultralytics_yolo26x_end_to_end.ipynb)
    - 运行固定的 393 帧异步 ROI workflow：interval 30、top-3 detection、单批在途、busy-skip，以及三 slot llama.cpp。
-   - 展示真实 submitted/skipped/completed 计数、VLM active/idle 检测 latency、视频完整性和可复现 manifest。
+   - 展示 submitted/skipped/completed 计数、VLM active/idle 检测 latency、视频完整性和可复现 manifest。
 
 三本 notebook 均由 [`scripts/build_notebooks.py`](scripts/build_notebooks.py) 确定性生成，在 workshop 镜像中从 clean kernel 执行并保存输出。每本 Notebook 都会在自身当前工作目录创建指向镜像内 immutable model directory 的 `models` 别名，不假设 Notebook 一定位于 `/workspace`。
 
@@ -97,7 +97,7 @@ ORT 生成的 `.mxr` 位于 `models/ort-migraphx-cache/<identity>/`。identity �
 | Qwen3-VL | 4 个时间段 |
 | 最终输出 | 393 帧，1920x1220，15.72 秒 |
 
-固定参数的异步 ROI End-to-end Notebook 也已在单张 W7900D 上完成同卡实测。配置为 interval 30、top-3 ROI、单批在途、busy-skip 和 llama.cpp 三 slot；采用相同 CPU overlay/VA-API 边界的公平 A/B 中，YOLO-only 为 **50.582 FPS**，异步 VLM 为 **37.045 FPS**。输入、输出 packet 和可解码帧均为 393。14 次触发机会实际提交 3 批、忙时跳过 11 次，9/9 ROI 成功；batch latency 为 **4.820 秒 P50 / 5.040 秒 P95**。VLM active 时 detection P50 为 24.999 ms，idle 时为 10.813 ms，说明异步控制流消除了等待，但不会消除同卡 GPU contention。该 async 路径为了 CPU overlay 和 JPEG ROI transport 保留显式整帧 D2H（本次 1.663 ms/frame），不属于零整帧 D2H direct path。证据位于 [`output/async_roi_e2e/`](output/async_roi_e2e/)。参与者使用的 120 帧 A/B 以及保存的决策卡/设计答卷位于 [`output/hands_on/`](output/hands_on/)。
+固定参数的异步 ROI End-to-end Notebook 也已在单张 W7900D 上完成同卡实测。配置为 interval 30、top-3 ROI、单批在途、busy-skip 和 llama.cpp 三 slot；采用相同 CPU overlay/VA-API 边界的公平 A/B 中，YOLO-only 为 **50.582 FPS**，异步 VLM 为 **37.045 FPS**。输入、输出 packet 和可解码帧均为 393。14 次触发机会实际提交 3 批、忙时跳过 11 次，9/9 ROI 成功；batch latency 为 **4.820 秒 P50 / 5.040 秒 P95**。VLM active 时 detection P50 为 24.999 ms，idle 时为 10.813 ms，说明异步控制流消除了等待，但不会消除同卡 GPU contention。该 async 路径为了 CPU overlay 和 JPEG ROI transport 保留显式整帧 D2H（本次 1.663 ms/frame），不属于零整帧 D2H direct path。证据位于 [`output/async_roi_e2e/`](output/async_roi_e2e/)。Prompt 练习生成的 custom video 与 review JSON 位于 [`output/hands_on/`](output/hands_on/)。
 
 当前视觉 pass 的 detection 为 10.44 ms/frame，异步 GPU overlay/encode worker 为 7.85 ms/frame，而主线程 queue feed 仅 0.15 ms/frame。worker 与推理重叠，因此不能将阶段均值直接相加计算端到端 FPS。YOLO 与最终 MP4 均严格包含 393 个 packet、393 个 container sample 和 393 个可解码帧。
 

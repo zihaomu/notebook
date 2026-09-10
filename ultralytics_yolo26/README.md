@@ -12,15 +12,15 @@ Take an Ultralytics YOLO26x checkpoint beyond `predict()` and into a production-
 
 ## Notebooks
 
-1. [`ultralytics_yolo26x_step_by_step.ipynb`](ultralytics_yolo26x_step_by_step.ipynb)
-   - Exports the YOLO26x checkpoint to static ONNX and runs it through the Ultralytics MIGraphX backend.
-   - Measures cold compile, warm inference, explicit H2D/D2H transfers, resident GPU buffers, parity, and per-stage latency.
-2. [`ultralytics_yolo26x_hands_on.ipynb`](ultralytics_yolo26x_hands_on.ipynb)
-   - Lets participants choose one supported interval/top-K/GPU-placement decision and compare YOLO-only, VLM-only, and asynchronous ROI execution.
-   - Produces a structured coordination answer covering trigger, evidence, output, backpressure, failure, and metrics.
+1. [`ultralytics_yolo26x_step_by_step.ipynb`](ultralytics_yolo26x_step_by_step.ipynb) **(recommended start)**
+   - Follows one frame through PT/ONNX, host/GPU boundaries, residency, parity, VLM, and production proof.
+   - A controlled 120-frame A/B measured **48.209 FPS / 2.774 ms full-frame D2H** for CPU round-trip versus **97.959 FPS / 0 ms D2H** for GPU direct.
+2. [`ultralytics_yolo26x_hands_on.ipynb`](ultralytics_yolo26x_hands_on.ipynb) **(recommended exercise)**
+   - Participants edit one natural-language question and compare VLM answers over the exact same visual evidence.
+   - YOLO runs every frame, the coordinator selects four evidence windows, and VLM answers on demand.
 3. [`ultralytics_yolo26x_end_to_end.ipynb`](ultralytics_yolo26x_end_to_end.ipynb)
-   - Runs the fixed 393-frame asynchronous ROI workflow: interval 30, top-3 detections, one active batch, busy-skip, and llama.cpp with three slots.
-   - Reports real submitted/skipped/completed counts, active/idle detector latency, video integrity, and a reproducible manifest.
+   - Runs the fixed 393-frame asynchronous ROI workflow with interval 30, top-3 detections, one active batch, busy-skip, and three llama.cpp slots.
+   - Reports submitted/skipped/completed counts, active/idle detector latency, video integrity, and a reproducible manifest.
 
 All three notebooks are generated from [`scripts/build_notebooks.py`](scripts/build_notebooks.py), executed in the workshop image, and saved with outputs. Each notebook creates a `models` alias in its current working directory that points to the immutable model directory exposed by the image; it does not assume the notebook is mounted at `/workspace`.
 
@@ -96,7 +96,7 @@ Validated on an AMD Radeon PRO W7900D (`gfx1100`), ROCm 7.2, with the official r
 | Qwen3-VL temporal analysis | 4 segments |
 | Final output | 393 frames, 1920x1220, 15.72 s |
 
-The fixed asynchronous ROI End-to-end notebook was also validated on one W7900D with the pipeline and llama.cpp sharing the same GPU. Using interval 30, top-3 ROIs, one active batch, busy-skip, and three llama.cpp slots, the fair CPU-overlay/VA-API A/B measured **50.582 FPS YOLO-only** versus **37.045 FPS with async VLM**. All 393 frames, packets, and decoded frames were preserved. Fourteen trigger opportunities produced 3 submitted batches, 11 busy skips, and 9/9 successful ROI responses. Batch latency was **4.820 s P50 / 5.040 s P95**. Detection P50 while VLM was active was 24.999 ms versus 10.813 ms while idle, demonstrating that asynchronous control flow removes waiting but not shared-GPU contention. The async path has an explicit full-frame D2H boundary (1.663 ms/frame in this run) for CPU overlay and JPEG ROI transport; it is not the no-full-frame-D2H direct path. Evidence is under [`output/async_roi_e2e/`](output/async_roi_e2e/). The 120-frame participant A/B and saved decision/design answers are under [`output/hands_on/`](output/hands_on/).
+The fixed asynchronous ROI End-to-end notebook was also validated on one W7900D with the pipeline and llama.cpp sharing the same GPU. Using interval 30, top-3 ROIs, one active batch, busy-skip, and three llama.cpp slots, the fair CPU-overlay/VA-API A/B measured **50.582 FPS YOLO-only** versus **37.045 FPS with async VLM**. All 393 frames, packets, and decoded frames were preserved. Fourteen trigger opportunities produced 3 submitted batches, 11 busy skips, and 9/9 successful ROI responses. Batch latency was **4.820 s P50 / 5.040 s P95**. Detection P50 while VLM was active was 24.999 ms versus 10.813 ms while idle, demonstrating that asynchronous control flow removes waiting but not shared-GPU contention. The async path has an explicit full-frame D2H boundary (1.663 ms/frame in this run) for CPU overlay and JPEG ROI transport; it is not the no-full-frame-D2H direct path. Evidence is under [`output/async_roi_e2e/`](output/async_roi_e2e/). The prompt-focused exercise saves its custom video and review JSON under [`output/hands_on/`](output/hands_on/).
 
 The current vision pass reports 10.44 ms/frame detection, 7.85 ms/frame in the asynchronous GPU overlay/encode worker, and only 0.15 ms/frame of main-thread queue feed. The worker overlaps with inference, so stage means are not summed to derive end-to-end FPS. Both MP4 outputs contain 393 packets, 393 container samples, and 393 decodable frames.
 

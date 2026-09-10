@@ -29,14 +29,14 @@
       6
     ],
     "checkpoint_sha256": "9fdd44a31c504547ffb81d2c6d9e6dac3493c8eaa8b0398d3f43bae6c7003e92",
-    "hip_vaapi_bridge_sha256": "c239bb1752f9d2724bf83d60418f18a6c78f8fa373fc591ed3237dd9e91496c1",
+    "hip_vaapi_bridge_sha256": "f753cb8292ae2b7859e111e0b01fdfa73ff05a229287cdba654e2a892b11eb1e",
     "vision_source_sha256": {
-      "src/pipeline.py": "9f88d10df44407ee96131300f16492511b85bbe2e556964c83f3f044ac18c9ae",
+      "src/pipeline.py": "4d26b69c45078134d66a1d60ac39ecb0e1d46ca81a46315209ac9e8bf39f2b08",
       "src/video_io.py": "b09f08f5ae75ae5b974a3fe1d8a428cb5046b99db9aafe3faf67c0e8cda34d0b",
       "src/detector.py": "de9900758278c170f757b53a98b5e01cc4a9bc63d7a1745504ef0e3589054498",
       "src/preprocess.py": "86c0af294cb69a674bdd9c2dd869d7b0331909bfe111840aaaf73f6cb6d1c643",
       "src/postprocess.py": "3f14d980548388dc1e952bccc06d2f2bb68abb10257e7c73d8e8e638d9ba03fb",
-      "native/hip_vaapi_bridge.cpp": "c239bb1752f9d2724bf83d60418f18a6c78f8fa373fc591ed3237dd9e91496c1"
+      "native/hip_vaapi_bridge.cpp": "f753cb8292ae2b7859e111e0b01fdfa73ff05a229287cdba654e2a892b11eb1e"
     },
     "onnxruntime_providers": [
       "MIGraphXExecutionProvider",
@@ -101,13 +101,13 @@
       "decoded_frames": 393
     },
     "performance": {
-      "fps": 74.7,
-      "preprocess_ms": 0.59,
-      "detection_ms": 10.44,
+      "fps": 93.7,
+      "preprocess_ms": 0.51,
+      "detection_ms": 9.15,
       "frame_d2h_ms": 0.0,
-      "direct_encode_feed_ms": 0.15,
-      "gpu_overlay_direct_encode_worker_ms": 7.85,
-      "host_load_1m": 218.12,
+      "direct_encode_feed_ms": 0.04,
+      "gpu_overlay_direct_encode_worker_ms": 6.32,
+      "host_load_1m": 1.84,
       "direct_encode_queue_depth": 3,
       "direct_encode_submitted_frames": 393,
       "direct_encode_encoded_frames": 393
@@ -118,28 +118,29 @@
   },
   "artifacts": {
     "01_yolo_base.mp4": {
-      "bytes": 12179315,
-      "sha256": "ad07dc52103673611ed6e55674342c6d5fddbfcd2f1349f1bd278f0c10a71307"
+      "bytes": 12234064,
+      "sha256": "e8919791778e8a17f9e5f04349f54423d6dd4c74378451f7bee5e7e06c1da726"
     },
     "01_yolo_base.log": {
-      "bytes": 6243,
-      "sha256": "001bb1e8b11ef8e4fe000702e306477cb4c17de9f18225892304d2cc2087a1c1"
+      "bytes": 6284,
+      "sha256": "b7d92956467912325ab4ebf55c62103df10e16c561b5e58abeaaa05848523f34"
     },
     "02_llamacpp_q8_timeline.json": {
-      "bytes": 2436,
-      "sha256": "910a62cfa32498b96fb2f5202a3d34704d378c01b3d0f62ee51a73dbd7227017"
+      "bytes": 2455,
+      "sha256": "13812dd88a45dad2bdef608b853797e203c64415ef10a8601da785367717c061"
     },
     "02_llamacpp_q8_subtitle.log": {
-      "bytes": 666,
-      "sha256": "c2d00943a472e4621fc51b1ab9f92dbfb5a8f5cca5730b91c6af6a12d8bfeaee"
+      "bytes": 676,
+      "sha256": "5ba04a029430ec00bae22b7eaece03f1a8f79635f77697cc53050923e0e5c236"
     },
     "03_final_llamacpp_q8.mp4": {
-      "bytes": 9338713,
-      "sha256": "cd49337ecc6b7b78f836115bc9b4aab441de732868c8a8c0645ea91f44885ae7"
+      "bytes": 9353959,
+      "sha256": "f574ddf87ff372ee16d5984c2a0c015ebb0d52c934fef938128df0abdbadd2d3"
     }
   },
   "notebooks": [
     "ultralytics_yolo26x_step_by_step.ipynb",
+    "ultralytics_yolo26x_hands_on.ipynb",
     "ultralytics_yolo26x_end_to_end.ipynb"
   ]
 }

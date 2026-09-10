@@ -48,9 +48,9 @@ If they do, bad things may happen!
 
 [detector] Loading YOLO26x ONNX through Ultralytics...
 [detector] MIGraphX cache identity: 735f1583e99dfeb733da
-Loading /workspace/models/yolo26x.onnx for ONNX Runtime inference...
+Loading /opt/ultralytics-yolo26/models/yolo26x.onnx for ONNX Runtime inference...
 Using ONNX Runtime 1.24.2 with MIGraphXExecutionProvider
-[0;93m2026-09-03 03:58:25.384412146 [W:onnxruntime:Default, migraphx_execution_provider.cc:167 MIGraphXExecutionProvider] [MIGraphX EP] MIGraphX ENV Override Variables Set:[m
+[0;93m2026-09-10 08:59:32.156528998 [W:onnxruntime:Default, migraphx_execution_provider.cc:167 MIGraphXExecutionProvider] [MIGraphX EP] MIGraphX ENV Override Variables Set:[m
 MIGraphX FP16 provider option is enabled; model input remains FP32.
 [detector] Ultralytics ONNX + MIGraphX EP (FP16, GPU I/O binding) ready; output=(1, 300, 6)
 {
@@ -62,7 +62,7 @@ MIGraphX FP16 provider option is enabled; model input remains FP32.
     "CPUExecutionProvider"
   ],
   "provider_options": {
-    "migraphx_model_cache_dir": "\"/workspace/models/ort-migraphx-cache/735f1583e99dfeb733da\"",
+    "migraphx_model_cache_dir": "\"/opt/ultralytics-yolo26/models/ort-migraphx-cache/735f1583e99dfeb733da\"",
     "device_id": "0",
     "migraphx_external_alloc": "0",
     "migraphx_fp8_enable": "0",
@@ -79,7 +79,7 @@ MIGraphX FP16 provider option is enabled; model input remains FP32.
   },
   "io_binding": true,
   "migraphx_fp16": true,
-  "cache_dir": "/workspace/models/ort-migraphx-cache/735f1583e99dfeb733da",
+  "cache_dir": "/opt/ultralytics-yolo26/models/ort-migraphx-cache/735f1583e99dfeb733da",
   "cache_identity": {
     "schema_version": 1,
     "onnx_file": "yolo26x.onnx",
@@ -107,26 +107,26 @@ MIGraphX FP16 provider option is enabled; model input remains FP32.
       6
     ]
   },
-  "output_pointer": 135349076492288
+  "output_pointer": 135006301192192
 }
 
 [pipeline] Starting pipeline...
 ----------------------------------------------------------------------
-  Frame 100/393 | FPS: 72.3 | Dets: 5
-  Frame 200/393 | FPS: 78.8 | Dets: 7
-  Frame 300/393 | FPS: 74.4 | Dets: 4
+  Frame 100/393 | FPS: 80.3 | Dets: 5
+  Frame 200/393 | FPS: 84.6 | Dets: 7
+  Frame 300/393 | FPS: 91.1 | Dets: 4
 
 ======================================================================
   Pipeline Complete
-  Frames: 393 | Total: 5.26s | Avg FPS: 74.7
-  Host load average: 218.12, 204.80, 192.92 | logical CPUs: 128
+  Frames: 393 | Video pipeline: 4.20s | Avg FPS: 93.7
+  Host load average: 1.84, 1.93, 2.49 | logical CPUs: 128
   Video decode:    rocdecode   |   Video encode: vaapi-direct
-  Avg Preprocess:  0.59ms/frame (GPU/HIP)
-  Avg Detection:   10.44ms/frame (ultralytics-migraphx)
+  Avg Preprocess:  0.51ms/frame (GPU/HIP)
+  Avg Detection:   9.15ms/frame (ultralytics-migraphx)
   Avg Frame D2H:   0.00ms/frame
   Avg CPU overlay: 0.00ms/frame (HIP overlay active)
-  Avg Direct encode feed: 0.15ms/frame
-  Avg GPU overlay + direct encode worker: 7.85ms/frame
+  Avg Direct encode feed: 0.04ms/frame
+  Avg GPU overlay + direct encode worker: 6.32ms/frame
   Direct encode queue: depth=3 | submitted=393 | encoded=393
   Output saved to: /workspace/output/pipeline/01_yolo_base.mp4
 ======================================================================

@@ -1,0 +1,28 @@
+{
+  "evidence": {
+    "segment_index": 0,
+    "start": 0.0,
+    "end": 4.0,
+    "sample_times": [
+      0.6,
+      2.0,
+      3.4
+    ],
+    "storyboard": "/workspace/output/pipeline/step-13-vlm-scene-input-segment-01.jpg",
+    "sha256": "19a893a8155cb2624c09ffb7746a547ddb371f11e85b3b17674add7d7a4c3548",
+    "baseline_caption": "Pedestrians cross street as cars pass by in urban setting.",
+    "baseline_latency_seconds": 0.3806799650192261
+  },
+  "default": {
+    "question": "What is happening in this scene?",
+    "prompt": "The three panels are chronological frames from the same video segment. Write one concise English subtitle that summarizes the main subjects, actions, and setting, emphasizing what is happening. Do not list every object. Do not mention images, frames, or the model. Do not invent unclear details. Use at most 18 words and output only the subtitle text.",
+    "answer": "Pedestrians cross street as cars pass by in urban setting.",
+    "latency_seconds": 0.3806799650192261
+  },
+  "custom": {
+    "question": "What road-safety risks are visible?",
+    "prompt": "You are a careful visual observer. What road-safety risks are visible? Answer in one sentence of no more than 20 words. Use only visible evidence. Do not invent unclear details; say unclear when the evidence is insufficient.",
+    "answer": "Pedestrians cross street while vehicles move nearby, risking collision.",
+    "latency_seconds": 0.388
+  }
+}

@@ -1,29 +1,41 @@
+# Python and notebook caches
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Large model files are mounted locally or supplied by the cloud template.
-models/*.onnx
-models/*.mxr
-models/*.pt
-models/*.gguf
-models/*.log
-models/*.part
-models/.cache/
-models/ort-migraphx-cache/
+# Local builds, profiles, and vendored worktrees
+.build/
+build/
+third_party/
+.rocprofv3/
+native/build/
+doc/slide/
+
+# Local models and compiler caches; keep only the model documentation.
+models/*
 !models/README.md
 
-# Keep the verified pipeline artifacts, ignore ad-hoc output elsewhere.
+# Preserve local source videos. The canonical sidewalk video is tracked;
+# additional videos stay on this machine unless explicitly force-added.
+data/*.mp4
+!data/sidewalk.mp4
+
+# Runtime output is local by default. Only compact, reviewed workshop evidence
+# is published; logs, exports, caches, checkpoints, and timestamped runs stay local.
 output/*
 !output/.gitkeep
-!output/pipeline/
-!output/pipeline/**
 !output/benchmarks/
 !output/benchmarks/**
-!output/hands_on/
-!output/hands_on/**
+!output/pipeline/
+!output/pipeline/**
 !output/async_roi_e2e/
 !output/async_roi_e2e/**
-.build/
-
-native/build/
+!output/hands_on/
+output/hands_on/*
+!output/hands_on/custom_prompt_video.mp4
+!output/hands_on/custom_timeline.json
+!output/hands_on/prompt_comparison.json
+!output/hands_on/submission.json

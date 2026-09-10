@@ -23,9 +23,9 @@
         3.4
       ],
       "storyboard": "step-13-vlm-scene-input-segment-01.jpg",
-      "caption": "Pedestrians cross street as cars pass by in busy urban setting.",
-      "raw_response": "Pedestrians cross street as cars pass by in busy urban setting.",
-      "latency_seconds": 0.48719497211277485
+      "caption": "Pedestrians cross street as cars pass by in urban setting.",
+      "raw_response": "Pedestrians cross street as cars pass by in urban setting.",
+      "latency_seconds": 0.3806799650192261
     },
     {
       "index": 2,
@@ -37,9 +37,9 @@
         7.4
       ],
       "storyboard": "step-13-vlm-scene-input-segment-02.jpg",
-      "caption": "Pedestrian crosses street as vehicles pass by in urban setting.",
-      "raw_response": "Pedestrian crosses street as vehicles pass by in urban setting.",
-      "latency_seconds": 0.4328094609081745
+      "caption": "Pedestrian crosses street as cars pass by in urban setting.",
+      "raw_response": "Pedestrian crosses street as cars pass by in urban setting.",
+      "latency_seconds": 0.3694927109172568
     },
     {
       "index": 3,
@@ -51,9 +51,9 @@
         11.4
       ],
       "storyboard": "step-13-vlm-scene-input-segment-03.jpg",
-      "caption": "Pedestrians and cyclist cross street near food cart and delivery truck.",
-      "raw_response": "Pedestrians and cyclist cross street near food cart and delivery truck.",
-      "latency_seconds": 0.43696058448404074
+      "caption": "Pedestrians and cyclist cross urban street as delivery truck passes by.",
+      "raw_response": "Pedestrians and cyclist cross urban street as delivery truck passes by.",
+      "latency_seconds": 0.39576652203686535
     },
     {
       "index": 4,
@@ -65,9 +65,9 @@
         15.162
       ],
       "storyboard": "step-13-vlm-scene-input-segment-04.jpg",
-      "caption": "Pedestrians cross street as delivery truck passes by urban sidewalk.",
-      "raw_response": "Pedestrians cross street as delivery truck passes by urban sidewalk.",
-      "latency_seconds": 0.4287559697404504
+      "caption": "Pedestrians cross street as truck passes by, urban scene with sidewalk and storefronts.",
+      "raw_response": "Pedestrians cross street as truck passes by, urban scene with sidewalk and storefronts.",
+      "latency_seconds": 0.4439859220292419
     }
   ]
 }

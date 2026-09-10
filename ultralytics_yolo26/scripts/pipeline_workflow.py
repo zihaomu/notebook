@@ -14,7 +14,9 @@ from pathlib import Path
 from scripts import notebook_env as env
 
 
-RUN_DIR = env.OUTPUT / "pipeline"
+RUN_DIR = Path(
+    os.environ.get("ULTRALYTICS_YOLO26_PIPELINE_DIR", env.OUTPUT / "pipeline")
+).resolve()
 YOLO_VIDEO = RUN_DIR / "01_yolo_base.mp4"
 PIPELINE_LOG = RUN_DIR / "01_yolo_base.log"
 TIMELINE = RUN_DIR / "02_llamacpp_q8_timeline.json"

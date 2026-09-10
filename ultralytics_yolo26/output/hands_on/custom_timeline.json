@@ -1,0 +1,78 @@
+{
+  "source": "/workspace/data/sidewalk.mp4",
+  "backend": "llamacpp",
+  "model": "/models/Qwen3-VL-8B-Instruct-Q8_0.gguf",
+  "base_url": "http://ultralytics_yolo26_llamacpp:8199/v1",
+  "prompt": "You are a careful visual observer. What road-safety risks are visible? Answer in one sentence of no more than 20 words. Use only visible evidence. Do not invent unclear details; say unclear when the evidence is insufficient.",
+  "interval_seconds": 4.0,
+  "video": {
+    "fps": 25.0,
+    "frame_count": 393,
+    "width": 1920,
+    "height": 1080,
+    "duration": 15.72
+  },
+  "segments": [
+    {
+      "index": 1,
+      "start": 0.0,
+      "end": 4.0,
+      "sample_times": [
+        0.6,
+        2.0,
+        3.4
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-01.jpg",
+      "caption": "Pedestrians cross street while vehicles move nearby, risking collision.",
+      "raw_response": "Pedestrians cross street while vehicles move nearby, risking collision.",
+      "latency_seconds": 0.388,
+      "evidence_sha256": "19a893a8155cb2624c09ffb7746a547ddb371f11e85b3b17674add7d7a4c3548"
+    },
+    {
+      "index": 2,
+      "start": 4.0,
+      "end": 8.0,
+      "sample_times": [
+        4.6,
+        6.0,
+        7.4
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-02.jpg",
+      "caption": "Pedestrian crossing street with moving vehicles, including taxi and delivery truck.",
+      "raw_response": "Pedestrian crossing street with moving vehicles, including taxi and delivery truck.",
+      "latency_seconds": 0.39013854297809303,
+      "evidence_sha256": "4cff18b4afc6839c5c07e0940ff23b7308fdd75932e859d3caef6b050781a1d8"
+    },
+    {
+      "index": 3,
+      "start": 8.0,
+      "end": 12.0,
+      "sample_times": [
+        8.6,
+        10.0,
+        11.4
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-03.jpg",
+      "caption": "Pedestrians and cyclist cross street near vehicles, risking collisions.",
+      "raw_response": "Pedestrians and cyclist cross street near vehicles, risking collisions.",
+      "latency_seconds": 0.3705818470334634,
+      "evidence_sha256": "8f57dd7c375011b55572833f994e2988e908fdd4f4ca7bce73397b8342f5b6bf"
+    },
+    {
+      "index": 4,
+      "start": 12.0,
+      "end": 15.72,
+      "sample_times": [
+        12.558,
+        13.86,
+        15.162
+      ],
+      "storyboard": "step-13-vlm-scene-input-segment-04.jpg",
+      "caption": "Pedestrians crossing street near moving truck, risking collision with vehicle or debris.",
+      "raw_response": "Pedestrians crossing street near moving truck, risking collision with vehicle or debris.",
+      "latency_seconds": 0.40545634797308594,
+      "evidence_sha256": "5acf562814c3982fa85d7f881fc2e2689b92b2d859810a3d3656de697a1aff12"
+    }
+  ],
+  "question": "What road-safety risks are visible?"
+}
