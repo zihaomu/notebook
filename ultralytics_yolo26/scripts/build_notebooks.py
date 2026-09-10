@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -203,6 +204,41 @@ print(json.dumps({
 models
 '''
 
+step_setup_code = setup_code.replace(
+    'from scripts.model_setup import ensure_models, model_status\nfrom scripts.notebook_helpers import frame_at, show_bgr, show_bgr_grid, video_info',
+    'from IPython.display import Markdown, display\nfrom scripts.model_setup import ensure_models, model_status\nfrom scripts import notebook_helpers\nnotebook_helpers = importlib.reload(notebook_helpers)\nfrom scripts.notebook_helpers import (\n    capture_log,\n    frame_at,\n    show_bgr,\n    show_bgr_grid,\n    show_video,\n    video_info,\n)',
+).replace(
+    'models = ensure_models(env.MODELS, progress=True)\nruntime = validate(require_models=True, require_vlm=False)\nprint(json.dumps({\n    "notebook_dir": str(NOTEBOOK_DIR),\n    "source_root": str(ROOT),\n    "model_source": str(BAKED_MODELS),\n    "model_alias": str(NOTEBOOK_DIR / "models"),\n    "model_mapping": MODEL_MAPPING,\n    "model_delivery": delivery_mode,\n    **runtime,\n}, indent=2))\nmodels',
+    'with capture_log(env.OUTPUT / "logs/environment.log", "Environment validation"):\n    models = ensure_models(env.MODELS, progress=True)\n    runtime = validate(require_models=True, require_vlm=False)\n\nsource_info = video_info(env.SOURCE_VIDEO)\npreview_times = [\n    0.0,\n    source_info["duration_seconds"] / 2,\n    max(0.0, source_info["duration_seconds"] - 0.2),\n]\nsource_preview_frames = [frame_at(env.SOURCE_VIDEO, seconds) for seconds in preview_times]\nfirst_frame = source_preview_frames[0]\ndisplay(Markdown(\n    f"**Runtime ready:** `{runtime[\'torch_gpu\']}` / `{runtime[\'gpu_arch\']}`; "\n    f"OpenCV HIP devices: `{runtime[\'opencv_hip_devices\']}`; model mapping: "\n    f"`{NOTEBOOK_DIR / \'models\'}` -> `{MODEL_DIR}` ({MODEL_MAPPING})."\n))\nshow_bgr_grid(\n    source_preview_frames,\n    [f"Input at {seconds:.1f} s" for seconds in preview_times],\n    columns=3,\n)',
+)
+
+_STEP_ASSET_SUMMARY = r"""
+verified_model_names = [Path(item["path"]).name for item in models if item["ready"]]
+display(Markdown(
+    "### Verified model and backend assets\n\n"
+    + "\n".join(f"- `{name}`" for name in verified_model_names)
+    + "\n"
+    + f"- ORT providers: `{', '.join(runtime['onnxruntime_providers'])}`\n"
+    + f"- MIGraphX cache: `{runtime['migraphx_cache']}`\n"
+    + f"- Writable output: `{env.OUTPUT}`"
+))
+"""
+_STEP_NATIVE_BUILD = r"""
+native_build = ROOT / "native/build"
+if native_build.is_dir():
+    native_build_text = str(native_build)
+    if native_build_text not in sys.path:
+        sys.path.insert(0, native_build_text)
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
+    pythonpath_entries = existing_pythonpath.split(":") if existing_pythonpath else []
+    if native_build_text not in pythonpath_entries:
+        os.environ["PYTHONPATH"] = ":".join([native_build_text, *pythonpath_entries])
+"""
+step_setup_code = step_setup_code.replace(
+    'OUTPUT_DIR = NOTEBOOK_DIR / "output"',
+    'OUTPUT_DIR = NOTEBOOK_DIR / "output" / "step_by_step"',
+) + _STEP_NATIVE_BUILD + _STEP_ASSET_SUMMARY
+
 step_cells = [
     markdown("step-title", r'''
 # YOLO26x Step by Step: From PyTorch to a GPU-Resident Video Pipeline
@@ -227,9 +263,9 @@ The goal is not to memorize one FPS number. The goal is to identify each hardwar
     markdown("step-setup-md", r'''
 ## 1. Verify the fixed environment
 
-The workshop image already contains the checkpoint, release ONNX, MIGraphX cache, Qwen3-VL weights, and the patched Ultralytics backend. This cell verifies those assets before any timing result is accepted.
+The workshop image already contains the checkpoint, release ONNX, MIGraphX cache, Qwen3-VL weights, and the patched Ultralytics backend. This cell still performs the complete model/GPU/runtime validation, but keeps verbose output in `output/logs/environment.log` and presents the verified environment with real input frames.
 '''),
-    code("step-setup", setup_code),
+    code("step-setup", step_setup_code),
     markdown("step-export-md", r'''
 ## 2. Convert the YOLO26x checkpoint from PyTorch to static ONNX
 
@@ -238,43 +274,56 @@ The export is deliberately static: batch 1, `640 x 640`, and an end-to-end `[1, 
 The checkpoint is copied into `output/export/` first, so the export cannot overwrite the immutable release model. `RUN_EXPORT=1` is the default for this teaching notebook. Set it to `0` only when reusing the verified release ONNX.
 '''),
     code("step-export", r'''
+import gc
 import hashlib
 import shutil
 import time
 
 import onnx
+import torch
 from ultralytics import YOLO
 
 RUN_EXPORT = os.environ.get("RUN_EXPORT", "1") == "1"
 export_dir = env.OUTPUT / "export"
 export_dir.mkdir(parents=True, exist_ok=True)
 
-if RUN_EXPORT:
-    checkpoint_copy = export_dir / env.YOLO_CHECKPOINT.name
-    shutil.copy2(env.YOLO_CHECKPOINT, checkpoint_copy)
-    export_started = time.perf_counter()
-    workshop_onnx = Path(
-        YOLO(str(checkpoint_copy)).export(
+with capture_log(env.OUTPUT / "logs/pt_to_onnx.log", "PyTorch inference and ONNX export"):
+    pt_model = YOLO(str(env.YOLO_CHECKPOINT))
+    pt_result = pt_model.predict(
+        first_frame,
+        device=0,
+        half=True,
+        imgsz=640,
+        conf=0.5,
+        iou=0.45,
+        verbose=False,
+    )[0]
+    if RUN_EXPORT:
+        checkpoint_copy = export_dir / env.YOLO_CHECKPOINT.name
+        shutil.copy2(env.YOLO_CHECKPOINT, checkpoint_copy)
+        export_started = time.perf_counter()
+        export_model = YOLO(str(checkpoint_copy))
+        workshop_onnx = Path(export_model.export(
             format="onnx",
             imgsz=640,
             batch=1,
             dynamic=False,
             simplify=False,
             device=0,
-        )
-    ).resolve()
-    export_seconds = time.perf_counter() - export_started
-else:
-    workshop_onnx = env.YOLO_ONNX
-    export_seconds = None
+        )).resolve()
+        export_seconds = time.perf_counter() - export_started
+        del export_model
+    else:
+        workshop_onnx = env.YOLO_ONNX
+        export_seconds = None
 
+pt_plot = pt_result.plot()
 onnx_model = onnx.load(str(workshop_onnx), load_external_data=False)
 onnx.checker.check_model(onnx_model)
 input_shape = [dim.dim_value for dim in onnx_model.graph.input[0].type.tensor_type.shape.dim]
 output_shape = [dim.dim_value for dim in onnx_model.graph.output[0].type.tensor_type.shape.dim]
 metadata = {item.key: item.value for item in onnx_model.metadata_props}
 onnx_sha256 = hashlib.sha256(workshop_onnx.read_bytes()).hexdigest()
-
 export_record = {
     "checkpoint": str(env.YOLO_CHECKPOINT),
     "onnx": str(workshop_onnx),
@@ -287,9 +336,25 @@ export_record = {
     "task": metadata.get("task"),
     "end2end": metadata.get("end2end"),
 }
-print(json.dumps(export_record, indent=2))
+export_summary = (
+    f"exported in `{export_seconds:.2f} s`"
+    if export_seconds is not None
+    else "reused the verified release ONNX"
+)
+display(Markdown(
+    f"**Conversion result:** `{input_shape}` -> `{output_shape}`; "
+    f"{workshop_onnx.stat().st_size / 1024**2:.1f} MiB; {export_summary}."
+))
+show_bgr_grid(
+    [first_frame, pt_plot],
+    ["Input frame", f"PyTorch checkpoint output ({len(pt_result.boxes)} boxes)"],
+    columns=2,
+)
 assert input_shape == [1, 3, 640, 640]
 assert output_shape == [1, 300, 6]
+del pt_result, pt_model
+gc.collect()
+torch.cuda.empty_cache()
 '''),
     markdown("step-predict-md", r'''
 ## 3. Run ONNX through the Ultralytics MIGraphX backend
@@ -309,7 +374,7 @@ import gc
 import math
 import statistics
 
-import cv2
+import matplotlib.pyplot as plt
 import torch
 
 from migraphx_cache import prepare_cache
@@ -326,35 +391,18 @@ deployment_cache_root = (
 )
 deployment_cache_root.mkdir(parents=True, exist_ok=True)
 os.environ["ULTRALYTICS_MIGRAPHX_CACHE_ROOT"] = str(deployment_cache_root)
-cache_dir, cache_identity = prepare_cache(deployment_onnx, deployment_cache_root, 0)
+display(Markdown("Compiling/loading the MIGraphX program, then measuring steady-state prediction..."))
 
-capture = cv2.VideoCapture(str(env.SOURCE_VIDEO))
-ok, first_frame = capture.read()
-capture.release()
-assert ok
+with capture_log(env.OUTPUT / "logs/onnx_migraphx.log", "ONNX/MIGraphX inference"):
+    cache_dir, cache_identity = prepare_cache(
+        deployment_onnx, deployment_cache_root, 0
+    )
+    construct_started = time.perf_counter()
+    yolo = YOLO(str(deployment_onnx), task="detect")
+    construct_ms = (time.perf_counter() - construct_started) * 1000
 
-construct_started = time.perf_counter()
-yolo = YOLO(str(deployment_onnx), task="detect")
-construct_ms = (time.perf_counter() - construct_started) * 1000
-
-torch.cuda.synchronize()
-first_started = time.perf_counter()
-result = yolo.predict(
-    first_frame,
-    device=0,
-    half=True,
-    imgsz=640,
-    conf=0.5,
-    iou=0.45,
-    verbose=False,
-)[0]
-torch.cuda.synchronize()
-first_predict_ms = (time.perf_counter() - first_started) * 1000
-
-predict_samples_ms = []
-for _ in range(12):
     torch.cuda.synchronize()
-    started = time.perf_counter()
+    first_started = time.perf_counter()
     result = yolo.predict(
         first_frame,
         device=0,
@@ -365,7 +413,23 @@ for _ in range(12):
         verbose=False,
     )[0]
     torch.cuda.synchronize()
-    predict_samples_ms.append((time.perf_counter() - started) * 1000)
+    first_predict_ms = (time.perf_counter() - first_started) * 1000
+
+    predict_samples_ms = []
+    for _ in range(12):
+        torch.cuda.synchronize()
+        started = time.perf_counter()
+        result = yolo.predict(
+            first_frame,
+            device=0,
+            half=True,
+            imgsz=640,
+            conf=0.5,
+            iou=0.45,
+            verbose=False,
+        )[0]
+        torch.cuda.synchronize()
+        predict_samples_ms.append((time.perf_counter() - started) * 1000)
 
 backend = yolo.predictor.model.backend
 assert backend.provider == "MIGraphXExecutionProvider"
@@ -388,9 +452,26 @@ backend_timing = {
     "single_call_rate_from_p50": round(1000 / predict_p50_ms, 1),
     "boxes": len(result.boxes),
 }
-print(json.dumps(backend_timing, indent=2))
-show_bgr(result_plot, "Ultralytics YOLO26x ONNX on MIGraphX")
-
+show_bgr_grid(
+    [pt_plot, result_plot],
+    ["PyTorch checkpoint", "ONNX Runtime + MIGraphX FP16"],
+    columns=2,
+)
+figure, axis = plt.subplots(figsize=(9, 4))
+labels = ["First predict\n(compile/cache)", "Steady P50", "Steady P95"]
+values = [first_predict_ms, predict_p50_ms, predict_p95_ms]
+bars = axis.bar(labels, values, color=["#d97706", "#007c91", "#4f6d7a"])
+axis.bar_label(bars, fmt="%.1f ms", padding=3)
+axis.set_ylabel("Latency (ms)")
+axis.set_title("MIGraphX cold start versus steady-state prediction")
+axis.grid(axis="y", alpha=0.25)
+figure.tight_layout()
+plt.show()
+display(Markdown(
+    f"**Backend:** `{backend.provider}` / FP16 / I/O Binding. "
+    f"Steady P50 `{predict_p50_ms:.2f} ms` ({1000 / predict_p50_ms:.1f} calls/s); "
+    f"detected `{len(result.boxes)}` objects."
+))
 del result, yolo, backend
 gc.collect()
 torch.cuda.empty_cache()
@@ -410,7 +491,6 @@ We compare:
 Pinned memory can enable asynchronous DMA, but `non_blocking=True` alone does not make a dependency disappear. This cell synchronizes after every copy to measure completion rather than enqueue time. The exact numbers are machine-specific; the payload-size contrast is the transferable lesson.
 '''),
     code("step-transfer", r'''
-from IPython.display import display
 import pandas as pd
 
 
@@ -469,7 +549,22 @@ for payload_name, shape, dtype in transfer_cases:
         })
 
 transfer_table = pd.DataFrame(transfer_results)
-display(transfer_table)
+figure, axes = plt.subplots(1, 2, figsize=(14, 4.5))
+for axis, direction in zip(axes, ("H2D", "D2H")):
+    subset = transfer_table[transfer_table["direction"] == direction]
+    for memory, color in (("pageable", "#d97706"), ("pinned", "#007c91")):
+        values = subset[subset["host_memory"] == memory]
+        positions = [index + (-0.18 if memory == "pageable" else 0.18) for index in range(len(values))]
+        axis.bar(positions, values["p50_ms"], width=0.34, label=memory, color=color)
+    axis.set_xticks(range(len(values)), values["payload"], rotation=18, ha="right")
+    axis.set_yscale("log")
+    axis.set_ylabel("P50 latency (ms, log scale)")
+    axis.set_title(f"{direction}: payload size changes the cost")
+    axis.grid(axis="y", alpha=0.25)
+    axis.legend()
+figure.tight_layout()
+plt.show()
+display(transfer_table[["payload", "direction", "host_memory", "payload_MiB", "p50_ms", "p95_ms"]])
 '''),
     markdown("step-resident-md", r'''
 ## 5. Remove repeated transfers with resident GPU buffers
@@ -479,41 +574,48 @@ The production adapter initializes Ultralytics once, keeps the ORT/MIGraphX back
 This cell times inference only. Compare it with the high-level `predict()` result, but do not call the difference “transfer time”: the high-level API also includes preprocessing, postprocessing, and Python result construction.
 '''),
     code("step-resident", r'''
+import cv2
 import config as pipeline_config
 
 pipeline_config = importlib.reload(pipeline_config)
 pipeline_config.YOLO_MODEL_PATH = str(deployment_onnx)
 
 from detector import UltralyticsYOLODetector
+from postprocess import draw_detections
 from preprocess import GPUPreprocessor
 from video_io import RocDecodeReader
 
-reader = RocDecodeReader(str(env.SOURCE_VIDEO), device_id=0)
-processor = GPUPreprocessor((640, 640), device="cuda:0")
-detector = UltralyticsYOLODetector(model_path=str(deployment_onnx), device_id=0)
-try:
-    ok, rgb_gpu = reader.read_gpu()
-    assert ok and rgb_gpu.is_cuda
-    blob_gpu, scale, pad_w, pad_h = processor.process(rgb_gpu)
-    for _ in range(5):
-        raw_gpu = detector.infer_gpu(blob_gpu)
-    torch.cuda.synchronize()
-    resident_samples_ms = []
-    input_pointer = blob_gpu.data_ptr()
-    output_pointer = raw_gpu.data_ptr()
-    for _ in range(30):
+with capture_log(env.OUTPUT / "logs/gpu_resident_path.log", "GPU-resident path"):
+    reader = RocDecodeReader(str(env.SOURCE_VIDEO), device_id=0)
+    processor = GPUPreprocessor((640, 640), device="cuda:0")
+    detector = UltralyticsYOLODetector(model_path=str(deployment_onnx), device_id=0)
+    try:
+        ok, rgb_gpu = reader.read_gpu()
+        assert ok and rgb_gpu.is_cuda
+        blob_gpu, scale, pad_w, pad_h = processor.process(rgb_gpu)
+        for _ in range(5):
+            raw_gpu = detector.infer_gpu(blob_gpu)
         torch.cuda.synchronize()
-        started = time.perf_counter()
-        raw_gpu = detector.infer_gpu(blob_gpu)
-        torch.cuda.synchronize()
-        resident_samples_ms.append((time.perf_counter() - started) * 1000)
-        assert blob_gpu.data_ptr() == input_pointer
-        assert raw_gpu.data_ptr() == output_pointer
-    detections = detector._parse_gpu(
-        raw_gpu, scale, pad_w, pad_h, tuple(rgb_gpu.shape)
-    )
-finally:
-    reader.release()
+        resident_samples_ms = []
+        input_pointer = blob_gpu.data_ptr()
+        output_pointer = raw_gpu.data_ptr()
+        for _ in range(30):
+            torch.cuda.synchronize()
+            started = time.perf_counter()
+            raw_gpu = detector.infer_gpu(blob_gpu)
+            torch.cuda.synchronize()
+            resident_samples_ms.append((time.perf_counter() - started) * 1000)
+            assert blob_gpu.data_ptr() == input_pointer
+            assert raw_gpu.data_ptr() == output_pointer
+        detections = detector._parse_gpu(
+            raw_gpu, scale, pad_w, pad_h, tuple(rgb_gpu.shape)
+        )
+        decoded_rgb = rgb_gpu.cpu().numpy()
+        model_input_rgb = (
+            blob_gpu[0].permute(1, 2, 0).clamp(0, 1).mul(255).byte().cpu().numpy()
+        )
+    finally:
+        reader.release()
 
 resident_inference = {
     "p50_ms": round(statistics.median(resident_samples_ms), 3),
@@ -521,18 +623,28 @@ resident_inference = {
     "input_pointer": input_pointer,
     "output_pointer": output_pointer,
 }
-print(json.dumps({
-    "decoded": {
-        "shape": list(rgb_gpu.shape),
-        "device": str(rgb_gpu.device),
-        "pointer": rgb_gpu.data_ptr(),
-    },
-    "preprocess": {**processor.pointer_info(), "shape": list(blob_gpu.shape)},
-    "inference": {**detector.provider_info(), "timing": resident_inference},
-    "detections": detections,
-}, indent=2))
+decoded_bgr = cv2.cvtColor(decoded_rgb, cv2.COLOR_RGB2BGR)
+model_input_bgr = cv2.cvtColor(model_input_rgb, cv2.COLOR_RGB2BGR)
+production_plot = decoded_bgr.copy()
+draw_detections(production_plot, detections, names=detector.names)
+show_bgr_grid(
+    [decoded_bgr, model_input_bgr, production_plot],
+    [
+        f"rocDecode GPU frame {tuple(rgb_gpu.shape)}",
+        f"OpenCV HIP letterbox {tuple(blob_gpu.shape)}",
+        f"GPU NMS output ({len(detections)} boxes)",
+    ],
+    columns=3,
+)
+display(Markdown(
+    f"**Resident inference:** P50 `{resident_inference['p50_ms']:.2f} ms`, "
+    f"P95 `{resident_inference['p95_ms']:.2f} ms`; input/output pointers stayed stable. "
+    "The two `.cpu()` copies above exist only to render this teaching figure."
+))
 assert blob_gpu.device.type == "cuda" and raw_gpu.device.type == "cuda"
 
+production_detections = list(detections)
+production_names = detector.names
 del detector, processor, raw_gpu, blob_gpu, rgb_gpu
 gc.collect()
 torch.cuda.empty_cache()
@@ -545,8 +657,37 @@ The convenience path and production path use different letterbox implementations
     code("step-parity", r'''
 from tests.test_predict_production_parity import validate as validate_parity
 
-parity = validate_parity(deployment_onnx, env.SOURCE_VIDEO, minimum_iou=0.90)
-print(json.dumps(parity, indent=2))
+with capture_log(env.OUTPUT / "logs/predict_production_parity.log", "Prediction parity"):
+    parity = validate_parity(deployment_onnx, env.SOURCE_VIDEO, minimum_iou=0.90)
+
+reference_plot = result_plot.copy()
+production_parity_plot = first_frame.copy()
+draw_detections(production_parity_plot, production_detections, names=production_names)
+show_bgr_grid(
+    [reference_plot, production_parity_plot],
+    [
+        f"Ultralytics predict ({parity['predict_boxes']} boxes)",
+        f"Production GPU path ({parity['production_boxes']} boxes)",
+    ],
+    columns=2,
+)
+figure, axis = plt.subplots(figsize=(8, 2.6))
+axis.barh(
+    ["Minimum class-matched IoU", "Mean class-matched IoU"],
+    [parity["minimum_class_matched_iou"], parity["mean_class_matched_iou"]],
+    color=["#d97706", "#007c91"],
+)
+axis.axvline(parity["minimum_required_iou"], color="#b91c1c", linestyle="--", label="required")
+axis.set_xlim(0.8, 1.0)
+axis.set_xlabel("IoU")
+axis.legend()
+axis.grid(axis="x", alpha=0.25)
+figure.tight_layout()
+plt.show()
+display(Markdown(
+    f"**Parity PASS:** minimum class-matched IoU "
+    f"`{parity['minimum_class_matched_iou']:.4f}` >= `{parity['minimum_required_iou']:.2f}`."
+))
 gc.collect()
 torch.cuda.empty_cache()
 '''),
@@ -563,23 +704,38 @@ from tests.benchmark_gpu_stages import benchmark
 RUN_BENCHMARK = os.environ.get("RUN_BENCHMARK", "0") == "1"
 benchmark_path = env.OUTPUT / f"benchmarks/gpu_stages_{deployment_sha256[:12]}.json"
 if RUN_BENCHMARK or not benchmark_path.is_file():
-    gpu_benchmark = benchmark(
-        env.SOURCE_VIDEO,
-        frames=120,
-        warmup=10,
-        model_path=deployment_onnx,
-    )
+    with capture_log(env.OUTPUT / "logs/gpu_stage_benchmark.log", "GPU stage benchmark"):
+        gpu_benchmark = benchmark(
+            env.SOURCE_VIDEO,
+            frames=120,
+            warmup=10,
+            model_path=deployment_onnx,
+        )
     benchmark_path.parent.mkdir(parents=True, exist_ok=True)
     benchmark_path.write_text(json.dumps(gpu_benchmark, indent=2) + "\n")
 else:
     gpu_benchmark = json.loads(benchmark_path.read_text())
-print(json.dumps({
-    "model": str(deployment_onnx),
-    "stages": gpu_benchmark["stages"],
-    "gpu_path_mean_ms": gpu_benchmark["gpu_path_mean_ms"],
-    "gpu_path_fps": gpu_benchmark["gpu_path_fps"],
-    "stable_pointers": gpu_benchmark["stable_pointers"],
-}, indent=2))
+    print(f"GPU stage benchmark: reused {benchmark_path}")
+
+stage_names = ["decode", "preprocess", "inference", "gpu_nms"]
+stage_labels = ["rocDecode", "OpenCV HIP\npreprocess", "MIGraphX\ninference", "GPU NMS"]
+means = [gpu_benchmark["stages"][name]["mean_ms"] for name in stage_names]
+p95s = [gpu_benchmark["stages"][name]["p95_ms"] for name in stage_names]
+figure, axis = plt.subplots(figsize=(10, 4.5))
+positions = range(len(stage_names))
+axis.bar([value - 0.18 for value in positions], means, width=0.36, label="mean", color="#007c91")
+axis.bar([value + 0.18 for value in positions], p95s, width=0.36, label="P95", color="#d97706")
+axis.set_xticks(list(positions), stage_labels)
+axis.set_ylabel("Latency (ms)")
+axis.set_title(f"GPU-resident path: {gpu_benchmark['gpu_path_mean_ms']:.2f} ms / {gpu_benchmark['gpu_path_fps']:.1f} FPS")
+axis.grid(axis="y", alpha=0.25)
+axis.legend()
+figure.tight_layout()
+plt.show()
+display(Markdown(
+    f"**Stable allocations:** `{len(gpu_benchmark['stable_pointers'])}` tracked pointers; "
+    f"all stayed unchanged across `{gpu_benchmark['frames']}` measured frames."
+))
 '''),
     markdown("step-optimization-md", r'''
 ## 8. Build the optimization ladder
@@ -610,37 +766,47 @@ pageable_d2h = full_frame_transfers[
 
 optimization_ledger = pd.DataFrame([
     {
-        "measurement": "Ultralytics high-level predict",
+        "measurement": "High-level predict",
         "p50_ms": backend_timing["steady_predict_p50_ms"],
         "scope": "CPU image -> Results",
         "lesson": "Convenient baseline; includes more than inference",
     },
     {
-        "measurement": "1080p pageable H2D",
+        "measurement": "1080p H2D",
         "p50_ms": pageable_h2d["p50_ms"],
         "scope": "One full RGB frame",
-        "lesson": "Avoid with GPU decode or overlap when unavoidable",
+        "lesson": "Remove with GPU decode",
     },
     {
-        "measurement": "1080p pageable D2H",
+        "measurement": "1080p D2H",
         "p50_ms": pageable_d2h["p50_ms"],
         "scope": "One full RGB frame",
-        "lesson": "Copy compact metadata instead of full frames",
+        "lesson": "Copy compact metadata instead",
     },
     {
-        "measurement": "Resident MIGraphX inference",
+        "measurement": "Resident inference",
         "p50_ms": resident_inference["p50_ms"],
         "scope": "GPU input -> GPU output",
-        "lesson": "Stable I/O Binding isolates model execution",
+        "lesson": "Stable I/O Binding isolates execution",
     },
     {
-        "measurement": "GPU-resident stage path",
+        "measurement": "Resident stage path",
         "p50_ms": gpu_benchmark["gpu_path_mean_ms"],
-        "scope": "Decode + preprocess + inference + GPU NMS",
-        "lesson": "Measure this boundary before overlay and encode",
+        "scope": "Decode -> GPU NMS",
+        "lesson": "Relevant boundary before overlay/encode",
     },
 ])
-display(optimization_ledger)
+figure, axis = plt.subplots(figsize=(11, 4.6))
+colors = ["#4f6d7a", "#d97706", "#b91c1c", "#007c91", "#2d6a4f"]
+bars = axis.barh(optimization_ledger["measurement"], optimization_ledger["p50_ms"], color=colors)
+axis.invert_yaxis()
+axis.bar_label(bars, fmt="%.3f ms", padding=4)
+axis.set_xlabel("Latency (ms)")
+axis.set_title("Optimization ledger: compare boundaries before removing them")
+axis.grid(axis="x", alpha=0.25)
+figure.tight_layout()
+plt.show()
+display(optimization_ledger[["measurement", "scope", "lesson"]])
 '''),
     markdown("step-vlm-md", r'''
 ## 9. Measure VLM input and output separately
@@ -651,62 +817,100 @@ The cell displays exactly what the VLM received and what it returned. Set `RUN_V
 '''),
     code("step-vlm", r'''
 from scripts import pipeline_workflow as workflow
+workflow = importlib.reload(workflow)
 
 RUN_VLM_LIVE = os.environ.get("RUN_VLM_LIVE", "0") == "1"
-if workflow.TIMELINE.is_file():
-    timeline = json.loads(workflow.TIMELINE.read_text())
-    first_segment = timeline["segments"][0]
-    storyboard_path = workflow.RUN_DIR / first_segment["storyboard"]
-    storyboard = cv2.imread(str(storyboard_path))
-    assert storyboard is not None
-    show_bgr(storyboard, "Qwen3-VL input: three chronological full-scene frames")
+if not workflow.TIMELINE.is_file():
+    with capture_log(env.OUTPUT / "logs/production_workflow.log", "Production workflow"):
+        workflow_result = workflow.run_workflow(force=False)
 
-    vlm_record = {
-        "backend": timeline["backend"],
-        "model": timeline["model"],
-        "interval_seconds": timeline["interval_seconds"],
-        "input": str(storyboard_path),
-        "sample_times": first_segment["sample_times"],
-        "output": first_segment["caption"],
-        "latency_seconds": first_segment["latency_seconds"],
-        "source": "verified timeline",
-    }
-    if RUN_VLM_LIVE:
-        from vlm_client import LlamaCppVLMClient
+timeline = json.loads(workflow.TIMELINE.read_text())
+first_segment = timeline["segments"][0]
+storyboard_path = workflow.RUN_DIR / first_segment["storyboard"]
+storyboard = cv2.imread(str(storyboard_path))
+assert storyboard is not None
+sample_frames = [frame_at(env.SOURCE_VIDEO, seconds) for seconds in first_segment["sample_times"]]
+show_bgr_grid(
+    [*sample_frames, storyboard],
+    [
+        *[f"Sample {seconds:.1f} s" for seconds in first_segment["sample_times"]],
+        "Qwen3-VL storyboard request",
+    ],
+    columns=2,
+)
 
+vlm_record = {
+    "backend": timeline["backend"],
+    "model": timeline["model"],
+    "interval_seconds": timeline["interval_seconds"],
+    "input": str(storyboard_path),
+    "sample_times": first_segment["sample_times"],
+    "output": first_segment["caption"],
+    "latency_seconds": first_segment["latency_seconds"],
+    "source": "verified timeline",
+}
+if RUN_VLM_LIVE:
+    from vlm_client import LlamaCppVLMClient
+
+    with capture_log(env.OUTPUT / "logs/vlm_live_request.log", "Live VLM request"):
         client = LlamaCppVLMClient(base_url=env.LLAMACPP_BASE_URL)
         assert client.health_check()
         started = time.perf_counter()
         live_output = client.describe_roi(storyboard, timeline["prompt"])
-        vlm_record.update({
-            "output": live_output,
-            "latency_seconds": round(time.perf_counter() - started, 3),
-            "source": "live request",
-        })
-    print(json.dumps(vlm_record, indent=2))
-else:
-    print("Run the End-to-end Notebook once to generate the verified Qwen3-VL timeline.")
+    vlm_record.update({
+        "output": live_output,
+        "latency_seconds": round(time.perf_counter() - started, 3),
+        "source": "live request",
+    })
+display(Markdown(
+    f"**Qwen3-VL output** ({vlm_record['latency_seconds']:.3f} s, {vlm_record['source']}):  "
+    f"{vlm_record['output']}"
+))
 '''),
     markdown("step-video-md", r'''
 ## 10. Connect the optimized stages to the unchanged production workflow
 
 The production command still runs the released YOLO-only GPU path. It forces rocDecode and `vaapi-direct`: a bounded worker queue holds the resident RGB tensor, then a dedicated HIP stream performs RGB-to-NV12, box/text overlay, and submission to a DRM PRIME VA-API surface.
 
-The End-to-end Notebook runs this command and then performs the existing VLM scene-analysis/render pass. This Step-by-step Notebook explains the costs; it does not change their orchestration.
+This final step runs or reuses the unchanged production workflow, then shows both the GPU-resident YOLO video and the rendered Qwen3-VL result. Detailed pipeline output remains in the artifact logs instead of filling the Notebook.
 '''),
     code("step-video", r'''
 from scripts import pipeline_workflow as workflow
+workflow = importlib.reload(workflow)
 
+RUN_PIPELINE = os.environ.get("RUN_PIPELINE", "0") == "1"
 os.environ["ULTRALYTICS_MIGRAPHX_CACHE_ROOT"] = str(env.MIGRAPHX_CACHE)
-print("Production YOLO command:")
-print(" ".join(workflow.pipeline_command(max_frames=120)))
-print("VA-API device:", os.environ.get("VAAPI_DEVICE", "/dev/dri/renderD128"))
-
-if workflow.MANIFEST.is_file():
-    manifest = json.loads(workflow.MANIFEST.read_text())
-    print(json.dumps(manifest["pipeline"]["performance"], indent=2))
+outputs_ready = all(path.is_file() for path in workflow.required_outputs())
+identity_ready, _ = workflow.manifest_matches_current()
+if RUN_PIPELINE or not (outputs_ready and identity_ready):
+    with capture_log(env.OUTPUT / "logs/production_workflow.log", "Production video workflow"):
+        workflow_result = workflow.run_workflow(force=RUN_PIPELINE)
 else:
-    print("Run the End-to-end Notebook to create the production manifest.")
+    workflow_result = workflow.validate_outputs()
+    print("Production video workflow: reused verified artifacts")
+manifest = json.loads(workflow.MANIFEST.read_text())
+performance = manifest["pipeline"]["performance"]
+
+yolo_times = [0.0, source_info["duration_seconds"] / 2, max(0.0, source_info["duration_seconds"] - 0.2)]
+yolo_frames = [frame_at(workflow.YOLO_VIDEO, seconds) for seconds in yolo_times]
+final_frames = [frame_at(workflow.FINAL_VIDEO, seconds) for seconds in yolo_times]
+for seconds, yolo_frame, final_frame in zip(yolo_times, yolo_frames, final_frames):
+    show_bgr_grid(
+        [yolo_frame, final_frame],
+        [
+            f"YOLO output at {seconds:.1f} s",
+            f"YOLO + VLM output at {seconds:.1f} s",
+        ],
+        columns=1,
+        size=(16, 14),
+    )
+show_video(workflow.YOLO_VIDEO, "YOLO26 GPU-resident detection video")
+show_video(workflow.FINAL_VIDEO, "Final YOLO26 + Qwen3-VL video")
+display(Markdown(
+    f"**Production result:** `{performance['fps']:.1f} FPS`; full-frame D2H "
+    f"`{performance['frame_d2h_ms']:.2f} ms`; submitted/encoded frames "
+    f"`{performance['direct_encode_submitted_frames']}/{performance['direct_encode_encoded_frames']}`."
+))
 '''),
     markdown("step-audit-md", r'''
 ## 11. Copy audit and takeaways
@@ -1248,8 +1452,17 @@ NOTEBOOKS = {
 }
 
 
-def main() -> None:
-    for name, payload in NOTEBOOKS.items():
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--only",
+        choices=tuple(NOTEBOOKS),
+        help="Generate one notebook instead of rewriting all notebooks.",
+    )
+    args = parser.parse_args(argv)
+    selected = {args.only: NOTEBOOKS[args.only]} if args.only else NOTEBOOKS
+
+    for name, payload in selected.items():
         target = ROOT / name
         target.write_text(
             json.dumps(payload, ensure_ascii=False, indent=1) + "\n",

@@ -287,7 +287,8 @@ __global__ void draw_detections_nv12(
             const int glyph_y = text_y / kFontScale;
             if (character_index < detection.label_length && glyph_x < kGlyphWidth && glyph_y < kGlyphHeight) {
                 const uint64_t bits = glyph_bits(detection.label[character_index]);
-                if (((bits >> (glyph_y * kGlyphWidth)) >> glyph_x) & 1u) {
+                const int glyph_bit = kGlyphWidth - 1 - glyph_x;
+                if (((bits >> (glyph_y * kGlyphWidth)) >> glyph_bit) & 1u) {
                     luma = 235;
                     chroma_u = 128;
                     chroma_v = 128;
