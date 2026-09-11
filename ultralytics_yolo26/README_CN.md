@@ -10,7 +10,7 @@
 
 **准备：** 只需一台能运行现代浏览器的笔记本电脑；所有实验都在预配置 Radeon Cloud 环境中运行。
 
-## 三本 Notebook
+## 两本 Notebook
 
 1. [`ultralytics_yolo26x_step_by_step.ipynb`](ultralytics_yolo26x_step_by_step.ipynb) **（推荐起点）**
    - 沿一帧数据解释 PT/ONNX、Host/GPU 边界、GPU 常驻、parity、VLM 和 production proof。
@@ -18,11 +18,8 @@
 2. [`ultralytics_yolo26x_hands_on.ipynb`](ultralytics_yolo26x_hands_on.ipynb) **（推荐练习）**
    - 参与者只修改一个自然语言问题，并在完全相同的视觉证据上比较 VLM 答案。
    - YOLO 每帧运行，Coordinator 选择四个 evidence window，VLM 按需回答。
-3. [`ultralytics_yolo26x_end_to_end.ipynb`](ultralytics_yolo26x_end_to_end.ipynb)
-   - 运行固定的 393 帧异步 ROI workflow：interval 30、top-3 detection、单批在途、busy-skip，以及三 slot llama.cpp。
-   - 展示 submitted/skipped/completed 计数、VLM active/idle 检测 latency、视频完整性和可复现 manifest。
 
-三本 notebook 均由 [`scripts/build_notebooks.py`](scripts/build_notebooks.py) 确定性生成，在 workshop 镜像中从 clean kernel 执行并保存输出。每本 Notebook 都会在自身当前工作目录创建指向镜像内 immutable model directory 的 `models` 别名，不假设 Notebook 一定位于 `/workspace`。
+两本 notebook 均由 [`scripts/build_notebooks.py`](scripts/build_notebooks.py) 确定性生成，在 workshop 镜像中从 clean kernel 执行并保存输出。每本 Notebook 都会在自身当前工作目录创建指向镜像内 immutable model directory 的 `models` 别名，不假设 Notebook 一定位于 `/workspace`。
 
 ## 可选 SSH 访问
 

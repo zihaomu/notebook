@@ -4,9 +4,12 @@
 
 - [Step-by-step Notebook design](YOLO26_VLM_Step-by-Step_Notebook设计.md)
 - [Hands-on prompt experiment design](YOLO26_VLM_Hands-on_Notebook设计.md)
-- [End-to-end Notebook design](YOLO26_VLM_End-to-End_Notebook设计.md)
 - [One-hour Workshop design](YOLO26_VLM_一小时End-to-End_Workshop_Demo设计.md)
 - [YOLO + VLM joint runtime architecture](YOLO26_VLM_联合运行模式设计.md)
+
+## Historical Design
+
+- [Archived End-to-end Notebook design](YOLO26_VLM_End-to-End_Notebook设计.md)
 
 ## Engineering
 

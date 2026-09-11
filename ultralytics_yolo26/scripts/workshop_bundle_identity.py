@@ -14,7 +14,6 @@ ROOT_FILES = (
     "README_CN.md",
     "ultralytics_yolo26x_step_by_step.ipynb",
     "ultralytics_yolo26x_hands_on.ipynb",
-    "ultralytics_yolo26x_end_to_end.ipynb",
     "data/sidewalk.mp4",
     "output/.gitkeep",
     "output/hands_on/custom_prompt_video.mp4",

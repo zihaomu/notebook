@@ -1,6 +1,6 @@
 # YOLO26 + VLM End-to-end Notebook 设计
 
-> 目标文件：`ultralytics_yolo26x_end_to_end.ipynb`
+> 历史设计：对应 Notebook 已从当前 workshop 交付中移除。
 >
 > 定位：固定参数、一键运行并验收 YOLO + 异步 ROI VLM
 >

@@ -18,11 +18,8 @@ Take an Ultralytics YOLO26x checkpoint beyond `predict()` and into a production-
 2. [`ultralytics_yolo26x_hands_on.ipynb`](ultralytics_yolo26x_hands_on.ipynb) **(recommended exercise)**
    - Participants edit one natural-language question and compare VLM answers over the exact same visual evidence.
    - YOLO runs every frame, the coordinator selects four evidence windows, and VLM answers on demand.
-3. [`ultralytics_yolo26x_end_to_end.ipynb`](ultralytics_yolo26x_end_to_end.ipynb)
-   - Runs the fixed 393-frame asynchronous ROI workflow with interval 30, top-3 detections, one active batch, busy-skip, and three llama.cpp slots.
-   - Reports submitted/skipped/completed counts, active/idle detector latency, video integrity, and a reproducible manifest.
 
-All three notebooks are generated from [`scripts/build_notebooks.py`](scripts/build_notebooks.py), executed in the workshop image, and saved with outputs. Each notebook creates a `models` alias in its current working directory that points to the immutable model directory exposed by the image; it does not assume the notebook is mounted at `/workspace`.
+Both notebooks are generated from [`scripts/build_notebooks.py`](scripts/build_notebooks.py), executed in the workshop image, and saved with outputs. Each notebook creates a `models` alias in its current working directory that points to the immutable model directory exposed by the image; it does not assume the notebook is mounted at `/workspace`.
 
 ## Optional SSH access
 

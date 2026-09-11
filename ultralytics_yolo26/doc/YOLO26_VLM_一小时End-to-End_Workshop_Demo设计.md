@@ -791,6 +791,6 @@ YOLO 提供高频视觉事实
 ## 16. 相关材料
 
 - [当前 Step-by-step Notebook](../ultralytics_yolo26x_step_by_step.ipynb)
-- [当前 End-to-end Notebook](../ultralytics_yolo26x_end_to_end.ipynb)
+- [End-to-end Notebook 历史设计](YOLO26_VLM_End-to-End_Notebook设计.md)
 - [Workshop 技术改造计划](ultralytics_yolo26_workshop_改造计划.md)
 - [发布与 CI 就绪修正计划](release_readiness_remediation_plan_CN.md)

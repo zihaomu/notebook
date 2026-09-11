@@ -1749,7 +1749,6 @@ You write the question; the application owns the complex model and pipeline work
 NOTEBOOKS = {
     "ultralytics_yolo26x_step_by_step.ipynb": notebook(step_v2_cells),
     "ultralytics_yolo26x_hands_on.ipynb": notebook(hands_v2_cells),
-    "ultralytics_yolo26x_end_to_end.ipynb": notebook(end_cells),
 }
 
 

@@ -78,7 +78,6 @@ def main() -> None:
         workspace / "output/hands_on/custom_timeline.json",
         workspace / "output/hands_on/submission.json",
         workspace / "output/hands_on/custom_prompt_video.mp4",
-        workspace / "ultralytics_yolo26x_end_to_end.ipynb",
         seed_root / "scripts/workshop_bundle_identity.py",
         Path("/usr/local/bin/vaapi-hip-encode-probe"),
         Path("/usr/local/share/ultralytics-yolo26-bundle.sha256"),

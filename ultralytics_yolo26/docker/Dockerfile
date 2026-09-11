@@ -75,7 +75,6 @@ RUN set -eux; \
 COPY .dockerignore .gitignore README.md README_CN.md \
     ultralytics_yolo26x_step_by_step.ipynb \
     ultralytics_yolo26x_hands_on.ipynb \
-    ultralytics_yolo26x_end_to_end.ipynb \
     /opt/ultralytics-yolo26/seed/
 COPY assets /opt/ultralytics-yolo26/seed/assets
 COPY data /opt/ultralytics-yolo26/seed/data
