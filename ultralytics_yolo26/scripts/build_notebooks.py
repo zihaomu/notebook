@@ -1509,6 +1509,57 @@ def hidden_code(cell_id, text):
     cell["metadata"]["tags"] = ["hide-input"]
     return cell
 
+hands_v2_llamacpp_start = r'''
+import json
+import subprocess
+import time
+import urllib.request
+from pathlib import Path
+
+health_url = "http://127.0.0.1:8199/health"
+launcher = Path("/usr/local/bin/start-ultralytics-yolo26-llamacpp")
+log_path = Path("/tmp/ultralytics-yolo26-llamacpp.log")
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+def llama_is_ready():
+    try:
+        with opener.open(health_url, timeout=2) as response:
+            return response.status == 200 and json.load(response).get("status") == "ok"
+    except Exception:
+        return False
+
+def llama_is_running():
+    for comm in Path("/proc").glob("[0-9]*/comm"):
+        try:
+            if comm.read_text().strip() == "llama-server":
+                return True
+        except (FileNotFoundError, PermissionError):
+            pass
+    return False
+
+if not llama_is_ready():
+    if not launcher.is_file():
+        raise FileNotFoundError(f"Missing embedded llama.cpp launcher: {launcher}")
+    if not llama_is_running():
+        with log_path.open("ab", buffering=0) as log_stream:
+            subprocess.Popen(
+                [str(launcher)],
+                stdout=log_stream,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+    for _ in range(180):
+        if llama_is_ready():
+            break
+        time.sleep(1)
+    else:
+        tail = log_path.read_text(errors="replace")[-4000:] if log_path.exists() else ""
+        raise RuntimeError(f"llama-server did not become ready. Log tail:\n{tail}")
+
+print("llama-server ready:", health_url)
+'''
+
+
 
 hands_v2_setup = setup_code.replace(
     'OUTPUT_DIR = NOTEBOOK_DIR / "output"',
@@ -1548,6 +1599,7 @@ YOLO every frame -> Coordinator selects evidence -> VLM answers your question
 
 You control the **question**. The application owns model loading, HTTP, timing, and rendering.
 '''),
+    hidden_code("hands-v2-llamacpp-start", hands_v2_llamacpp_start),
     hidden_code("hands-v2-setup", hands_v2_setup),
     markdown("hands-v2-evidence-md", r'''
 ## 2. Freeze the evidence
