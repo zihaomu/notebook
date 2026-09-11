@@ -910,8 +910,8 @@ for seconds, yolo_frame, final_frame in zip(yolo_times, yolo_frames, final_frame
         columns=1,
         size=(16, 14),
     )
-show_video(workflow.YOLO_VIDEO, "YOLO26 GPU-resident detection video")
-show_video(workflow.FINAL_VIDEO, "Final YOLO26 + Qwen3-VL video")
+show_video(workflow.YOLO_VIDEO, "YOLO26 GPU-resident detection video", embed=True)
+show_video(workflow.FINAL_VIDEO, "Final YOLO26 + Qwen3-VL video", embed=True)
 display(Markdown(
     f"**Production result:** `{performance['fps']:.1f} FPS`; full-frame D2H "
     f"`{performance['frame_d2h_ms']:.2f} ms`; submitted/encoded frames "
@@ -1702,8 +1702,8 @@ YOLO boxes stay fixed. Trigger selects the four evidence windows; your question 
 '''),
     hidden_code("hands-v2-videos", r'''
 videos = lab.video_paths()
-show_video(videos["baseline"], "Baseline: general scene summary")
-show_video(videos["custom"], f"Custom: {MY_QUESTION}")
+show_video(videos["baseline"], "Baseline: general scene summary", embed=True)
+show_video(videos["custom"], f"Custom: {MY_QUESTION}", embed=True)
 assert video_info(videos["baseline"])["frames"] == 393
 assert video_info(videos["custom"])["frames"] == 393
 '''),

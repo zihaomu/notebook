@@ -93,18 +93,24 @@ def show_bgr_grid(
     plt.show()
 
 
-def show_video(path: Path, title: str, width: int = 960) -> None:
-    """Stream a workspace video through Jupyter without embedding Base64 data."""
+def show_video(path: Path, title: str, width: int = 960, *, embed: bool = False) -> None:
+    """Display a video through Jupyter, optionally embedding it for VS Code."""
+    import base64
+
     from IPython.display import HTML, display
 
     path = Path(path).absolute()
     if not path.is_file():
         raise FileNotFoundError(path)
-    try:
-        relative = path.relative_to(Path.cwd().resolve()).as_posix()
-    except ValueError as error:
-        raise ValueError(f"Video must be inside the notebook directory: {path}") from error
-    source = "/files/" + quote(relative)
+    if embed:
+        payload = base64.b64encode(path.read_bytes()).decode("ascii")
+        source = f"data:video/mp4;base64,{payload}"
+    else:
+        try:
+            relative = path.relative_to(Path.cwd().resolve()).as_posix()
+        except ValueError as error:
+            raise ValueError(f"Video must be inside the notebook directory: {path}") from error
+        source = "/files/" + quote(relative)
     display(HTML(
         f'<figure style="margin:0 0 1.25rem 0">'
         f'<figcaption style="font-weight:600;margin-bottom:.45rem">{escape(title)}</figcaption>'
